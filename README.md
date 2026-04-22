@@ -1,6 +1,6 @@
 # 🚀 TradeX Frontend
 
-A modern, responsive **admin dashboard UI** for the TradeX trading and quantitative analysis platform.
+A modern, responsive **admin panel UI** for the TradeX trading and quantitative analysis platform.
 Built with **React, Vite, TailwindCSS, and advanced UI libraries**, this frontend provides powerful visualization and control over trading strategies, models, backtesting, market data, and sentiment analysis.
 
 ---
