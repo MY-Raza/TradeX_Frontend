@@ -8,7 +8,7 @@ import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tool
 import { motion, AnimatePresence } from 'motion/react';
 
 const strategies = ['MA Crossover', 'RSI Momentum', 'Bollinger Breakout', 'VWAP Reversion'];
-const exchanges = ['Binance', 'Coinbase', 'Kraken', 'Bybit'];
+const exchanges = ['Binance', 'Mt5 Trader', 'Kraken', 'Bybit'];
 
 const ledgerData = [
   { date: '2026-04-01', type: 'Buy', price: 68500, quantity: 0.1, pnl: 0 },

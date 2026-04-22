@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 
-const exchanges = ['Binance', 'Coinbase', 'Kraken', 'Bybit'];
+const exchanges = ['Binance', 'Mt5 Trader', 'Kraken', 'Bybit'];
 const coins = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'];
 const timeframes = [
   { value: '1m', label: '1 Minute' },
