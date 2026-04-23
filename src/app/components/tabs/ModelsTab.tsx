@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { Brain, TrendingUp, TrendingDown } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Bar, BarChart, Pie, PieChart, Cell } from 'recharts';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 const modelsData = [
   {
     id: 1,
     name: 'LSTM Predictor',
+    type: 'dl',
     longTrades: 145,
     shortTrades: 98,
     winTrades: 152,
@@ -23,6 +25,7 @@ const modelsData = [
   {
     id: 2,
     name: 'Random Forest',
+    type: 'ml',
     longTrades: 210,
     shortTrades: 156,
     winTrades: 228,
@@ -36,6 +39,7 @@ const modelsData = [
   {
     id: 3,
     name: 'Gradient Boost',
+    type: 'ml',
     longTrades: 178,
     shortTrades: 134,
     winTrades: 198,
@@ -45,6 +49,48 @@ const modelsData = [
     maxDrawdown: -10.8,
     maxConsecutiveWins: 9,
     maxConsecutiveLosses: 4,
+  },
+  {
+    id: 4,
+    name: 'Transformer Model',
+    type: 'dl',
+    longTrades: 192,
+    shortTrades: 143,
+    winTrades: 215,
+    lossTrades: 120,
+    winRate: 64.2,
+    lossRate: 35.8,
+    maxDrawdown: -11.3,
+    maxConsecutiveWins: 10,
+    maxConsecutiveLosses: 5,
+  },
+  {
+    id: 5,
+    name: 'CNN Price Action',
+    type: 'dl',
+    longTrades: 163,
+    shortTrades: 121,
+    winTrades: 178,
+    lossTrades: 106,
+    winRate: 62.7,
+    lossRate: 37.3,
+    maxDrawdown: -13.8,
+    maxConsecutiveWins: 7,
+    maxConsecutiveLosses: 6,
+  },
+  {
+    id: 6,
+    name: 'XGBoost Classifier',
+    type: 'ml',
+    longTrades: 234,
+    shortTrades: 189,
+    winTrades: 268,
+    lossTrades: 155,
+    winRate: 63.4,
+    lossRate: 36.6,
+    maxDrawdown: -14.5,
+    maxConsecutiveWins: 12,
+    maxConsecutiveLosses: 7,
   },
 ];
 
@@ -59,6 +105,12 @@ const performanceData = [
 
 export function ModelsTab() {
   const [selectedModel, setSelectedModel] = useState(modelsData[0]);
+  const [modelType, setModelType] = useState<string>('all');
+
+  const filteredModels = modelsData.filter((model) => {
+    if (modelType === 'all') return true;
+    return model.type === modelType;
+  });
 
   const tradeDistribution = [
     { name: 'Long Trades', value: selectedModel.longTrades },
@@ -79,18 +131,38 @@ export function ModelsTab() {
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
-      <div>
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Models</h2>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">Analyze your trading models performance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Models</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Analyze your trading models performance</p>
+        </div>
+        <div className="w-48">
+          <Select value={modelType} onValueChange={setModelType}>
+            <SelectTrigger>
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4" />
+                <SelectValue placeholder="Filter by type" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Models</SelectItem>
+              <SelectItem value="ml">ML Models</SelectItem>
+              <SelectItem value="dl">DL Models</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {modelsData.map((model, index) => (
+        <AnimatePresence mode="popLayout">
+          {filteredModels.map((model, index) => (
           <motion.div
             key={model.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: index * 0.1 }}
+            layout
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3, delay: index * 0.05 }}
           >
             <Card
               className={`cursor-pointer transition-all ${
@@ -111,13 +183,24 @@ export function ModelsTab() {
                     <CardTitle className={selectedModel.id === model.id ? 'text-white' : ''}>
                       {model.name}
                     </CardTitle>
-                    <Badge className={`mt-1 ${
-                      selectedModel.id === model.id
-                        ? 'bg-white/20 text-white border-white/40'
-                        : 'bg-green-500/10 text-green-600 dark:text-green-400'
-                    }`}>
-                      Active
-                    </Badge>
+                    <div className="flex gap-2 mt-1">
+                      <Badge className={`${
+                        selectedModel.id === model.id
+                          ? 'bg-white/20 text-white border-white/40'
+                          : model.type === 'ml'
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                          : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                      }`}>
+                        {model.type.toUpperCase()}
+                      </Badge>
+                      <Badge className={`${
+                        selectedModel.id === model.id
+                          ? 'bg-white/20 text-white border-white/40'
+                          : 'bg-green-500/10 text-green-600 dark:text-green-400'
+                      }`}>
+                        Active
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -184,7 +267,16 @@ export function ModelsTab() {
             </Card>
           </motion.div>
         ))}
+        </AnimatePresence>
       </div>
+
+      {filteredModels.length === 0 && (
+        <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+          <CardContent className="p-12 text-center">
+            <p className="text-gray-500 dark:text-gray-400">No models found matching your filter.</p>
+          </CardContent>
+        </Card>
+      )}
 
       <motion.div
         key={selectedModel.id}
