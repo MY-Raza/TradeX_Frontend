@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PlayCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -6,51 +6,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-
-const strategies = ['MA Crossover', 'RSI Momentum', 'Bollinger Breakout', 'VWAP Reversion'];
-const exchanges = ['Binance', 'Mt5 Trader', 'Kraken', 'Bybit'];
-
-const ledgerData = [
-  { date: '2026-04-01', type: 'Buy', price: 68500, quantity: 0.1, pnl: 0 },
-  { date: '2026-04-02', type: 'Sell', price: 69200, quantity: 0.1, pnl: 70 },
-  { date: '2026-04-03', type: 'Buy', price: 68800, quantity: 0.15, pnl: 0 },
-  { date: '2026-04-04', type: 'Sell', price: 70100, quantity: 0.15, pnl: 195 },
-  { date: '2026-04-05', type: 'Buy', price: 69900, quantity: 0.12, pnl: 0 },
-];
-
-const winLossData = [
-  { name: 'Trades Won', value: 28 },
-  { name: 'Trades Lost', value: 12 },
-];
-
-const pnlData = [
-  { trade: 1, pnl: 150 },
-  { trade: 2, pnl: -80 },
-  { trade: 3, pnl: 220 },
-  { trade: 4, pnl: 180 },
-  { trade: 5, pnl: -120 },
-  { trade: 6, pnl: 310 },
-  { trade: 7, pnl: 90 },
-  { trade: 8, pnl: -50 },
-];
+import {
+  backtestApi,
+  dataApi,
+  BacktestStrategyOption,
+  ExchangeInfo,
+  BacktestResponse,
+} from '../../../services/api';
 
 export function BacktestTab() {
-  const [strategy, setStrategy] = useState('');
-  const [exchange, setExchange] = useState('');
-  const [isRunning, setIsRunning] = useState(false);
-  const [showResults, setShowResults] = useState(false);
+  const [strategies, setStrategies]   = useState<BacktestStrategyOption[]>([]);
+  const [exchanges, setExchanges]     = useState<ExchangeInfo[]>([]);
+  const [strategy, setStrategy]       = useState('');
+  const [exchange, setExchange]       = useState('');
 
-  const handleRunBacktest = () => {
+  const [isLoading, setIsLoading]     = useState(false);
+  const [isRunning, setIsRunning]     = useState(false);
+  const [error, setError]             = useState('');
+  const [result, setResult]           = useState<BacktestResponse | null>(null);
+
+  // ── Load dropdowns ────────────────────────────────────────────────────────
+  useEffect(() => {
+    setIsLoading(true);
+    Promise.all([backtestApi.getStrategies(), dataApi.getExchanges()])
+      .then(([strats, excs]) => { setStrategies(strats); setExchanges(excs); })
+      .catch(() => setError('Failed to load strategies / exchanges'))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const handleRunBacktest = async () => {
     if (!strategy || !exchange) return;
-
     setIsRunning(true);
-    setShowResults(false);
+    setResult(null);
+    setError('');
 
-    setTimeout(() => {
+    try {
+      const res = await backtestApi.run({ strategy_name: strategy, exchange });
+      setResult(res);
+    } catch (e: any) {
+      setError(e.message ?? 'Backtest failed');
+    } finally {
       setIsRunning(false);
-      setShowResults(true);
-    }, 2000);
+    }
   };
+
+  const summary = result?.summary;
 
   return (
     <motion.div
@@ -64,43 +64,65 @@ export function BacktestTab() {
         <p className="text-gray-500 dark:text-gray-400 mt-1">Test your strategies with historical data</p>
       </div>
 
+      {/* Configuration */}
       <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Strategy</label>
-              <Select value={strategy} onValueChange={setStrategy}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select strategy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {strategies.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
             </div>
-            <div>
-              <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Exchange</label>
-              <Select value={exchange} onValueChange={setExchange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select exchange" />
-                </SelectTrigger>
-                <SelectContent>
-                  {exchanges.map((e) => (
-                    <SelectItem key={e} value={e}>{e}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Strategy */}
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Strategy</label>
+                <Select value={strategy} onValueChange={setStrategy}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select strategy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {strategies.map((s) => (
+                      <SelectItem key={s.name} value={s.name}>
+                        <span className="font-medium">{s.name}</span>
+                        <span className="ml-2 text-xs text-gray-400">
+                          {s.symbol.toUpperCase()} · {s.time_horizon}
+                          {s.tp ? ` · TP ${s.tp}%` : ''}
+                          {s.sl ? ` · SL ${s.sl}%` : ''}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Exchange */}
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Exchange</label>
+                <Select value={exchange} onValueChange={setExchange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select exchange" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {exchanges.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>{e.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-500/10 px-4 py-2 rounded-lg">{error}</p>
+          )}
+
           <Button
             className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600"
             onClick={handleRunBacktest}
-            disabled={!strategy || !exchange || isRunning}
+            disabled={!strategy || !exchange || isRunning || isLoading}
           >
             {isRunning ? (
               <>
@@ -117,6 +139,7 @@ export function BacktestTab() {
         </CardContent>
       </Card>
 
+      {/* Loading overlay */}
       <AnimatePresence>
         {isRunning && (
           <motion.div
@@ -135,14 +158,39 @@ export function BacktestTab() {
         )}
       </AnimatePresence>
 
+      {/* Results */}
       <AnimatePresence>
-        {showResults && !isRunning && (
+        {result && !isRunning && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="space-y-6"
           >
+            {/* Summary cards */}
+            {summary && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Starting Balance', value: `$${summary.starting_balance.toLocaleString()}`, color: 'text-gray-900 dark:text-white' },
+                  { label: 'Final Balance',    value: `$${summary.final_balance.toLocaleString()}`,    color: summary.final_balance >= summary.starting_balance ? 'text-green-500' : 'text-red-500' },
+                  { label: 'Total PnL',        value: `${summary.total_pnl_pct >= 0 ? '+' : ''}${summary.total_pnl_pct.toFixed(2)}%`, color: summary.total_pnl_pct >= 0 ? 'text-green-500' : 'text-red-500' },
+                  { label: 'Total Trades',     value: String(summary.total_trades), color: 'text-blue-500' },
+                  { label: 'Win Rate',         value: `${summary.win_rate.toFixed(1)}%`, color: 'text-green-500' },
+                  { label: 'Loss Rate',        value: `${summary.loss_rate.toFixed(1)}%`, color: 'text-red-500' },
+                  { label: 'Max Consec. Wins', value: String(summary.max_consecutive_wins), color: 'text-green-500' },
+                  { label: 'Max Consec. Losses', value: String(summary.max_consecutive_losses), color: 'text-red-500' },
+                ].map((s) => (
+                  <Card key={s.label} className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
+                      <p className={`text-xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Ledger */}
             <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
               <CardHeader>
                 <CardTitle>Ledger Details</CardTitle>
@@ -154,15 +202,18 @@ export function BacktestTab() {
                       <TableRow>
                         <TableHead>Date</TableHead>
                         <TableHead>Type</TableHead>
+                        <TableHead>Direction</TableHead>
                         <TableHead>Price</TableHead>
-                        <TableHead>Quantity</TableHead>
                         <TableHead>PnL</TableHead>
+                        <TableHead>PnL Sum</TableHead>
+                        <TableHead>Balance</TableHead>
+                        <TableHead>Reason</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ledgerData.map((entry, index) => (
+                      {result.ledger.map((entry, index) => (
                         <TableRow key={index}>
-                          <TableCell>{entry.date}</TableCell>
+                          <TableCell className="text-xs whitespace-nowrap">{entry.date}</TableCell>
                           <TableCell>
                             <span className={`px-2 py-1 rounded text-xs font-medium ${
                               entry.type === 'Buy'
@@ -172,11 +223,20 @@ export function BacktestTab() {
                               {entry.type}
                             </span>
                           </TableCell>
-                          <TableCell>${entry.price.toLocaleString()}</TableCell>
-                          <TableCell>{entry.quantity}</TableCell>
-                          <TableCell className={entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : ''}>
-                            {entry.pnl > 0 ? '+' : ''}${entry.pnl}
+                          <TableCell>
+                            <span className={`text-xs font-medium ${entry.direction === 'long' ? 'text-green-500' : 'text-red-500'}`}>
+                              {entry.direction}
+                            </span>
                           </TableCell>
+                          <TableCell>${entry.price.toLocaleString()}</TableCell>
+                          <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
+                            {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
+                          </TableCell>
+                          <TableCell className="text-blue-500">
+                            {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
+                          </TableCell>
+                          <TableCell>${entry.balance.toLocaleString()}</TableCell>
+                          <TableCell className="text-xs text-gray-500">{entry.reason ?? '–'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -185,6 +245,7 @@ export function BacktestTab() {
               </CardContent>
             </Card>
 
+            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
                 <CardHeader>
@@ -192,18 +253,11 @@ export function BacktestTab() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={winLossData}>
+                    <BarChart data={result.win_loss_data}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                       <XAxis dataKey="name" stroke="#9CA3AF" />
                       <YAxis stroke="#9CA3AF" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1F2937',
-                          border: 'none',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
                       <Bar dataKey="value" fill="#3B82F6" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -216,18 +270,11 @@ export function BacktestTab() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={pnlData}>
+                    <LineChart data={result.pnl_data}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                       <XAxis dataKey="trade" stroke="#9CA3AF" />
                       <YAxis stroke="#9CA3AF" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1F2937',
-                          border: 'none',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
                       <Line
                         type="monotone"
                         dataKey="pnl"

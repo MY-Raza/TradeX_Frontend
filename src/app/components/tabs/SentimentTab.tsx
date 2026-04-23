@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MessageSquare, TrendingUp, Loader2, Coins } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Loader2, Coins, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -8,328 +8,103 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ScrollArea } from '../ui/scroll-area';
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  sentimentApi,
+  CoinOption,
+  SentimentPost,
+  SentimentComment,
+  SentimentResultsResponse,
+} from '../../../services/api';
 
-const availableCoins = [
-  { value: 'BTC', label: 'Bitcoin (BTC)' },
-  { value: 'ETH', label: 'Ethereum (ETH)' },
-  { value: 'SOL', label: 'Solana (SOL)' },
-  { value: 'BNB', label: 'Binance Coin (BNB)' },
-  { value: 'ADA', label: 'Cardano (ADA)' },
-];
-
-const sentimentDataByCoin: Record<string, any> = {
-  BTC: {
-    posts: [
-      {
-        id: 1,
-        title: 'BTC breaking through resistance!',
-        author: 'u/cryptotrader',
-        upvotes: 245,
-        comments: 58,
-        sentiment: 'Positive',
-        score: 0.82,
-        confidence: 0.91,
-      },
-      {
-        id: 2,
-        title: 'Market correction incoming?',
-        author: 'u/analyst_pro',
-        upvotes: 189,
-        comments: 42,
-        sentiment: 'Negative',
-        score: -0.65,
-        confidence: 0.78,
-      },
-      {
-        id: 3,
-        title: 'Bitcoin halving impact discussion',
-        author: 'u/btc_holder',
-        upvotes: 312,
-        comments: 76,
-        sentiment: 'Positive',
-        score: 0.73,
-        confidence: 0.85,
-      },
-    ],
-    hourly: [
-      { hour: '00:00', sentiment: 0.45, confidence: 0.72 },
-      { hour: '04:00', sentiment: 0.62, confidence: 0.81 },
-      { hour: '08:00', sentiment: 0.38, confidence: 0.68 },
-      { hour: '12:00', sentiment: 0.71, confidence: 0.85 },
-      { hour: '16:00', sentiment: 0.55, confidence: 0.76 },
-      { hour: '20:00', sentiment: 0.68, confidence: 0.82 },
-    ],
-    overall: {
-      meanSentiment: 0.58,
-      stdSentiment: 0.15,
-      confidenceMean: 0.78,
-    },
-  },
-  ETH: {
-    posts: [
-      {
-        id: 1,
-        title: 'ETH 2.0 staking rewards are amazing!',
-        author: 'u/eth_staker',
-        upvotes: 324,
-        comments: 87,
-        sentiment: 'Positive',
-        score: 0.88,
-        confidence: 0.93,
-      },
-      {
-        id: 2,
-        title: 'Gas fees still too high',
-        author: 'u/defi_user',
-        upvotes: 276,
-        comments: 64,
-        sentiment: 'Negative',
-        score: -0.72,
-        confidence: 0.81,
-      },
-      {
-        id: 3,
-        title: 'Layer 2 solutions gaining traction',
-        author: 'u/l2_enthusiast',
-        upvotes: 198,
-        comments: 45,
-        sentiment: 'Positive',
-        score: 0.65,
-        confidence: 0.76,
-      },
-    ],
-    hourly: [
-      { hour: '00:00', sentiment: 0.52, confidence: 0.75 },
-      { hour: '04:00', sentiment: 0.68, confidence: 0.83 },
-      { hour: '08:00', sentiment: 0.42, confidence: 0.71 },
-      { hour: '12:00', sentiment: 0.76, confidence: 0.88 },
-      { hour: '16:00', sentiment: 0.61, confidence: 0.79 },
-      { hour: '20:00', sentiment: 0.73, confidence: 0.85 },
-    ],
-    overall: {
-      meanSentiment: 0.62,
-      stdSentiment: 0.14,
-      confidenceMean: 0.80,
-    },
-  },
-  SOL: {
-    posts: [
-      {
-        id: 1,
-        title: 'Solana network performance improving',
-        author: 'u/sol_dev',
-        upvotes: 215,
-        comments: 52,
-        sentiment: 'Positive',
-        score: 0.75,
-        confidence: 0.86,
-      },
-      {
-        id: 2,
-        title: 'Concerns about centralization',
-        author: 'u/crypto_critic',
-        upvotes: 167,
-        comments: 38,
-        sentiment: 'Negative',
-        score: -0.58,
-        confidence: 0.74,
-      },
-      {
-        id: 3,
-        title: 'NFT marketplace on Solana booming',
-        author: 'u/nft_trader',
-        upvotes: 289,
-        comments: 69,
-        sentiment: 'Positive',
-        score: 0.81,
-        confidence: 0.89,
-      },
-    ],
-    hourly: [
-      { hour: '00:00', sentiment: 0.48, confidence: 0.73 },
-      { hour: '04:00', sentiment: 0.65, confidence: 0.82 },
-      { hour: '08:00', sentiment: 0.41, confidence: 0.69 },
-      { hour: '12:00', sentiment: 0.73, confidence: 0.86 },
-      { hour: '16:00', sentiment: 0.58, confidence: 0.77 },
-      { hour: '20:00', sentiment: 0.71, confidence: 0.84 },
-    ],
-    overall: {
-      meanSentiment: 0.59,
-      stdSentiment: 0.16,
-      confidenceMean: 0.77,
-    },
-  },
-  BNB: {
-    posts: [
-      {
-        id: 1,
-        title: 'BNB Chain adoption increasing',
-        author: 'u/binance_fan',
-        upvotes: 198,
-        comments: 47,
-        sentiment: 'Positive',
-        score: 0.69,
-        confidence: 0.82,
-      },
-      {
-        id: 2,
-        title: 'Regulatory concerns for Binance',
-        author: 'u/news_tracker',
-        upvotes: 234,
-        comments: 56,
-        sentiment: 'Negative',
-        score: -0.76,
-        confidence: 0.88,
-      },
-      {
-        id: 3,
-        title: 'BSC DeFi ecosystem growing',
-        author: 'u/defi_builder',
-        upvotes: 176,
-        comments: 41,
-        sentiment: 'Neutral',
-        score: 0.15,
-        confidence: 0.68,
-      },
-    ],
-    hourly: [
-      { hour: '00:00', sentiment: 0.38, confidence: 0.70 },
-      { hour: '04:00', sentiment: 0.54, confidence: 0.78 },
-      { hour: '08:00', sentiment: 0.32, confidence: 0.65 },
-      { hour: '12:00', sentiment: 0.62, confidence: 0.82 },
-      { hour: '16:00', sentiment: 0.47, confidence: 0.73 },
-      { hour: '20:00', sentiment: 0.59, confidence: 0.79 },
-    ],
-    overall: {
-      meanSentiment: 0.49,
-      stdSentiment: 0.17,
-      confidenceMean: 0.74,
-    },
-  },
-  ADA: {
-    posts: [
-      {
-        id: 1,
-        title: 'Cardano smart contracts improving',
-        author: 'u/ada_developer',
-        upvotes: 187,
-        comments: 44,
-        sentiment: 'Positive',
-        score: 0.71,
-        confidence: 0.84,
-      },
-      {
-        id: 2,
-        title: 'Slow development progress',
-        author: 'u/impatient_investor',
-        upvotes: 156,
-        comments: 37,
-        sentiment: 'Negative',
-        score: -0.63,
-        confidence: 0.76,
-      },
-      {
-        id: 3,
-        title: 'Academic approach paying off',
-        author: 'u/research_focused',
-        upvotes: 203,
-        comments: 51,
-        sentiment: 'Positive',
-        score: 0.67,
-        confidence: 0.81,
-      },
-    ],
-    hourly: [
-      { hour: '00:00', sentiment: 0.43, confidence: 0.71 },
-      { hour: '04:00', sentiment: 0.59, confidence: 0.80 },
-      { hour: '08:00', sentiment: 0.36, confidence: 0.67 },
-      { hour: '12:00', sentiment: 0.68, confidence: 0.84 },
-      { hour: '16:00', sentiment: 0.52, confidence: 0.75 },
-      { hour: '20:00', sentiment: 0.65, confidence: 0.81 },
-    ],
-    overall: {
-      meanSentiment: 0.54,
-      stdSentiment: 0.16,
-      confidenceMean: 0.76,
-    },
-  },
-};
-
-const redditPosts = [
-  {
-    id: 1,
-    title: 'BTC breaking through resistance!',
-    author: 'u/cryptotrader',
-    upvotes: 245,
-    comments: 58,
-    sentiment: 'Positive',
-    score: 0.82,
-    confidence: 0.91,
-  },
-  {
-    id: 2,
-    title: 'Market correction incoming?',
-    author: 'u/analyst_pro',
-    upvotes: 189,
-    comments: 42,
-    sentiment: 'Negative',
-    score: -0.65,
-    confidence: 0.78,
-  },
-  {
-    id: 3,
-    title: 'ETH 2.0 update discussion',
-    author: 'u/eth_holder',
-    upvotes: 312,
-    comments: 76,
-    sentiment: 'Neutral',
-    score: 0.12,
-    confidence: 0.64,
-  },
-];
-
-const hourlySentiment = [
-  { hour: '00:00', sentiment: 0.45, confidence: 0.72 },
-  { hour: '04:00', sentiment: 0.62, confidence: 0.81 },
-  { hour: '08:00', sentiment: 0.38, confidence: 0.68 },
-  { hour: '12:00', sentiment: 0.71, confidence: 0.85 },
-  { hour: '16:00', sentiment: 0.55, confidence: 0.76 },
-  { hour: '20:00', sentiment: 0.68, confidence: 0.82 },
-];
+type ActiveItem = SentimentPost | SentimentComment | null;
 
 export function SentimentTab() {
-  const [selectedCoin, setSelectedCoin] = useState('BTC');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [selectedType, setSelectedType] = useState('post');
-  const [selectedView, setSelectedView] = useState('overall');
+  const [coins, setCoins]               = useState<CoinOption[]>([]);
+  const [selectedCoin, setSelectedCoin] = useState('');
 
-  const currentData = sentimentDataByCoin[selectedCoin];
-  const [selectedPost, setSelectedPost] = useState(currentData.posts[0]);
+  const [isAnalyzing, setIsAnalyzing]   = useState(false);
+  const [isFetchingCached, setIsFetchingCached] = useState(false);
+  const [results, setResults]           = useState<SentimentResultsResponse | null>(null);
+  const [error, setError]               = useState('');
 
-  const handleAnalyze = () => {
-    setIsAnalyzing(true);
-    setShowResults(false);
+  const [selectedType, setSelectedType] = useState<'post' | 'comment'>('post');
+  const [selectedView, setSelectedView] = useState<'overall' | 'hourly'>('overall');
+  const [activeItem, setActiveItem]     = useState<ActiveItem>(null);
 
-    setTimeout(() => {
-      setIsAnalyzing(false);
-      setShowResults(true);
-      setSelectedPost(currentData.posts[0]);
-    }, 2000);
+  // ── Load supported coins ──────────────────────────────────────────────────
+  useEffect(() => {
+    sentimentApi.getCoins()
+      .then((data) => {
+        setCoins(data);
+        if (data.length > 0) setSelectedCoin(data[0].id);
+      })
+      .catch(() => setError('Failed to load coins'));
+  }, []);
+
+  // ── When coin changes, try to load cached results ─────────────────────────
+  useEffect(() => {
+    if (!selectedCoin) return;
+    setResults(null);
+    setActiveItem(null);
+    setError('');
+    setIsFetchingCached(true);
+    sentimentApi.getResults(selectedCoin)
+      .then((data) => {
+        setResults(data);
+        pickFirstItem(data, selectedType);
+      })
+      .catch(() => {
+        // 404 = not run yet → just clear, no error shown
+        setResults(null);
+      })
+      .finally(() => setIsFetchingCached(false));
+  }, [selectedCoin]);
+
+  const pickFirstItem = (data: SentimentResultsResponse, type: 'post' | 'comment') => {
+    if (type === 'post' && data.posts.length > 0)    setActiveItem(data.posts[0]);
+    else if (type === 'comment' && data.comments.length > 0) setActiveItem(data.comments[0]);
+    else setActiveItem(null);
   };
 
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
-      case 'Positive':
-        return 'bg-green-500/10 text-green-600 dark:text-green-400';
-      case 'Negative':
-        return 'bg-red-500/10 text-red-600 dark:text-red-400';
-      default:
-        return 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
+  const handleAnalyze = async () => {
+    if (!selectedCoin) return;
+    setIsAnalyzing(true);
+    setError('');
+    try {
+      const res = await sentimentApi.run(selectedCoin);
+      setResults(res.results);
+      pickFirstItem(res.results, selectedType);
+    } catch (e: any) {
+      setError(e.message ?? 'Sentiment analysis failed');
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
-  const overallStats = currentData.overall;
+  const handleTypeChange = (type: 'post' | 'comment') => {
+    setSelectedType(type);
+    if (results) pickFirstItem(results, type);
+  };
+
+  const getSentimentColor = (sentiment: string) => {
+    if (sentiment === 'Positive' || sentiment === 'positive')
+      return 'bg-green-500/10 text-green-600 dark:text-green-400';
+    if (sentiment === 'Negative' || sentiment === 'negative')
+      return 'bg-red-500/10 text-red-600 dark:text-red-400';
+    return 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
+  };
+
+  const labelOf  = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  const isPost   = (item: ActiveItem): item is SentimentPost    => item !== null && 'title'       in item;
+  const isComment= (item: ActiveItem): item is SentimentComment => item !== null && 'text'        in item;
+
+  const hourlyData = results
+    ? (selectedType === 'post' ? results.hourly_posts : results.hourly_comments)
+    : [];
+
+  const displayItems: (SentimentPost | SentimentComment)[] = results
+    ? (selectedType === 'post' ? results.posts : results.comments)
+    : [];
 
   return (
     <motion.div
@@ -338,6 +113,7 @@ export function SentimentTab() {
       transition={{ duration: 0.4 }}
       className="space-y-6"
     >
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sentiment Analysis</h2>
@@ -349,22 +125,38 @@ export function SentimentTab() {
               <SelectTrigger>
                 <div className="flex items-center gap-2">
                   <Coins className="w-4 h-4" />
-                  <SelectValue />
+                  <SelectValue placeholder="Select coin" />
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {availableCoins.map((coin) => (
-                  <SelectItem key={coin.value} value={coin.value}>
-                    {coin.label}
-                  </SelectItem>
+                {coins.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.display}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {/* Reload cached */}
+          {results && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsFetchingCached(true);
+                sentimentApi.getResults(selectedCoin)
+                  .then((data) => { setResults(data); pickFirstItem(data, selectedType); })
+                  .catch(() => {})
+                  .finally(() => setIsFetchingCached(false));
+              }}
+              disabled={isFetchingCached}
+            >
+              <RefreshCw className={`w-4 h-4 ${isFetchingCached ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+
           <Button
             className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600"
             onClick={handleAnalyze}
-            disabled={isAnalyzing}
+            disabled={isAnalyzing || !selectedCoin}
           >
             {isAnalyzing ? (
               <>
@@ -381,17 +173,16 @@ export function SentimentTab() {
         </div>
       </div>
 
+      {/* Loading */}
       <AnimatePresence>
-        {isAnalyzing && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-          >
+        {(isAnalyzing || isFetchingCached) && (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
             <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
               <CardContent className="p-12 flex flex-col items-center justify-center">
                 <Loader2 className="w-16 h-16 text-purple-500 animate-spin mb-4" />
-                <p className="text-lg font-medium text-gray-900 dark:text-white">Analyzing Reddit sentiment...</p>
+                <p className="text-lg font-medium text-gray-900 dark:text-white">
+                  {isAnalyzing ? 'Analyzing Reddit sentiment...' : 'Loading cached results...'}
+                </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Processing posts and comments</p>
               </CardContent>
             </Card>
@@ -399,8 +190,31 @@ export function SentimentTab() {
         )}
       </AnimatePresence>
 
+      {/* Error */}
+      {error && !isAnalyzing && (
+        <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+          <CardContent className="p-6 text-center">
+            <p className="text-red-500">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No data yet */}
+      {!results && !isAnalyzing && !isFetchingCached && !error && selectedCoin && (
+        <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+          <CardContent className="p-12 text-center">
+            <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">
+              No sentiment data yet for <strong>{selectedCoin.toUpperCase()}</strong>.
+              Click <em>Analyze Sentiment</em> to run the pipeline.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results */}
       <AnimatePresence>
-        {showResults && !isAnalyzing && (
+        {results && !isAnalyzing && !isFetchingCached && (
           <motion.div
             key={selectedCoin}
             initial={{ opacity: 0, y: 20 }}
@@ -408,18 +222,19 @@ export function SentimentTab() {
             transition={{ duration: 0.5 }}
             className="space-y-6"
           >
-            <div className="flex gap-4">
-              <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger className="w-48">
+            {/* Type / view selectors */}
+            <div className="flex gap-4 flex-wrap">
+              <Select value={selectedType} onValueChange={(v: any) => handleTypeChange(v)}>
+                <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="post">Post</SelectItem>
-                  <SelectItem value="comment">Comment</SelectItem>
+                  <SelectItem value="post">Posts ({results.posts.length})</SelectItem>
+                  <SelectItem value="comment">Comments ({results.comments.length})</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={selectedView} onValueChange={setSelectedView}>
-                <SelectTrigger className="w-48">
+              <Select value={selectedView} onValueChange={(v: any) => setSelectedView(v)}>
+                <SelectTrigger className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -430,103 +245,135 @@ export function SentimentTab() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Post / comment list */}
               <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MessageSquare className="w-5 h-5" />
-                    Reddit Posts & Comments
+                    {selectedType === 'post' ? 'Reddit Posts' : 'Reddit Comments'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-96">
                     <div className="space-y-3 pr-4">
-                      {currentData.posts.map((post: any) => (
-                        <motion.div
-                          key={post.id}
-                          whileHover={{ scale: 1.02 }}
-                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                            selectedPost.id === post.id
-                              ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
-                              : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
-                          }`}
-                          onClick={() => setSelectedPost(post)}
-                        >
-                          <h4 className="font-medium text-sm text-gray-900 dark:text-white mb-2">
-                            {post.title}
-                          </h4>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{post.author}</p>
-                          <div className="flex items-center gap-2">
-                            <Badge className={getSentimentColor(post.sentiment)}>
-                              {post.sentiment}
-                            </Badge>
-                            <span className="text-xs text-gray-500">↑ {post.upvotes}</span>
-                            <span className="text-xs text-gray-500">💬 {post.comments}</span>
-                          </div>
-                        </motion.div>
-                      ))}
+                      {displayItems.length === 0 && (
+                        <p className="text-sm text-gray-500 text-center py-8">No {selectedType}s found.</p>
+                      )}
+                      {displayItems.map((item) => {
+                        const isActive = activeItem && 'id' in item && activeItem && 'id' in activeItem
+                          ? item.id === activeItem.id
+                          : false;
+                        const label   = isPost(item) ? item.title : (item as SentimentComment).text?.slice(0, 80) + '…';
+                        const author  = item.author;
+                        const sent    = item.sentiment;
+                        const upvotes = isPost(item) ? item.upvotes : (item as SentimentComment).upvotes;
+                        return (
+                          <motion.div
+                            key={item.id}
+                            whileHover={{ scale: 1.02 }}
+                            className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                              isActive
+                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-500/10'
+                                : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700'
+                            }`}
+                            onClick={() => setActiveItem(item)}
+                          >
+                            <h4 className="font-medium text-sm text-gray-900 dark:text-white mb-1 line-clamp-2">{label}</h4>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{author}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge className={getSentimentColor(sent)}>{labelOf(sent)}</Badge>
+                              <span className="text-xs text-gray-500">↑ {upvotes}</span>
+                              {isPost(item) && (
+                                <span className="text-xs text-gray-500">💬 {item.comments}</span>
+                              )}
+                              {item.subreddit && (
+                                <span className="text-xs text-gray-400">r/{item.subreddit}</span>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 </CardContent>
               </Card>
 
+              {/* Detail panel */}
               <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
                 <CardHeader>
                   <CardTitle>Sentiment Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Sentiment Label</span>
-                      <Badge className={getSentimentColor(selectedPost.sentiment)} size="lg">
-                        {selectedPost.sentiment}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Sentiment Score</span>
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {selectedPost.score > 0 ? '+' : ''}{selectedPost.score.toFixed(2)}
-                      </span>
-                    </div>
-                    <Progress
-                      value={Math.abs(selectedPost.score) * 100}
-                      className={selectedPost.score > 0 ? 'bg-green-500/20' : 'bg-red-500/20'}
-                    />
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Confidence</span>
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {(selectedPost.confidence * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                    <Progress value={selectedPost.confidence * 100} />
-                  </div>
-
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Post Metrics</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Upvotes</span>
-                        <span className="font-medium text-gray-900 dark:text-white">{selectedPost.upvotes}</span>
+                  {!activeItem ? (
+                    <p className="text-sm text-gray-500 text-center py-8">Select an item to see details.</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Label</span>
+                        <Badge className={getSentimentColor(activeItem.sentiment)}>
+                          {labelOf(activeItem.sentiment)}
+                        </Badge>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600 dark:text-gray-400">Comments</span>
-                        <span className="font-medium text-gray-900 dark:text-white">{selectedPost.comments}</span>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Score</span>
+                          <span className="text-lg font-bold text-gray-900 dark:text-white">
+                            {activeItem.score > 0 ? '+' : ''}{activeItem.score.toFixed(2)}
+                          </span>
+                        </div>
+                        <Progress value={Math.abs(activeItem.score) * 100} />
                       </div>
-                    </div>
-                  </div>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Confidence</span>
+                          <span className="text-lg font-bold text-gray-900 dark:text-white">
+                            {(activeItem.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <Progress value={activeItem.confidence * 100} />
+                      </div>
+
+                      <div className="pt-4 border-t border-gray-200 dark:border-gray-800 space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Upvotes</span>
+                          <span className="font-medium text-gray-900 dark:text-white">{activeItem.upvotes}</span>
+                        </div>
+                        {isPost(activeItem) && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Comments</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{activeItem.comments}</span>
+                          </div>
+                        )}
+                        {activeItem.subreddit && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Subreddit</span>
+                            <span className="font-medium text-gray-900 dark:text-white">r/{activeItem.subreddit}</span>
+                          </div>
+                        )}
+                        {isPost(activeItem) && activeItem.post_time && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Posted</span>
+                            <span className="font-medium text-gray-900 dark:text-white text-xs">{activeItem.post_time}</span>
+                          </div>
+                        )}
+                        {isComment(activeItem) && activeItem.comment_time && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Posted</span>
+                            <span className="font-medium text-gray-900 dark:text-white text-xs">{activeItem.comment_time}</span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
+              {/* Analytics */}
               <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
                 <CardHeader>
-                  <CardTitle>
-                    {selectedView === 'overall' ? 'Overall Analytics' : 'Hourly Analytics'}
-                  </CardTitle>
+                  <CardTitle>{selectedView === 'overall' ? 'Overall Analytics' : 'Hourly Analytics'}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {selectedView === 'overall' ? (
@@ -534,52 +381,41 @@ export function SentimentTab() {
                       <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-500/10 dark:to-cyan-500/10 rounded-xl">
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mean Sentiment</p>
                         <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                          {overallStats.meanSentiment > 0 ? '+' : ''}{overallStats.meanSentiment.toFixed(2)}
+                          {results.overall.mean_sentiment > 0 ? '+' : ''}{results.overall.mean_sentiment.toFixed(2)}
                         </p>
                       </div>
                       <div className="p-4 bg-gradient-to-br from-purple-50 to-purple-50 dark:from-purple-500/10 dark:to-purple-500/10 rounded-xl">
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Std Sentiment</p>
                         <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                          {overallStats.stdSentiment.toFixed(2)}
+                          {results.overall.std_sentiment.toFixed(2)}
                         </p>
                       </div>
                       <div className="p-4 bg-gradient-to-br from-green-50 to-green-50 dark:from-green-500/10 dark:to-green-500/10 rounded-xl">
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Confidence Mean</p>
                         <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                          {(overallStats.confidenceMean * 100).toFixed(0)}%
+                          {(results.overall.confidence_mean * 100).toFixed(0)}%
                         </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-gray-50 dark:bg-[#0B0F19] rounded-xl text-center">
+                          <p className="text-xs text-gray-500">Total Posts</p>
+                          <p className="text-xl font-bold text-gray-900 dark:text-white">{results.overall.total_posts}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 dark:bg-[#0B0F19] rounded-xl text-center">
+                          <p className="text-xs text-gray-500">Total Comments</p>
+                          <p className="text-xl font-bold text-gray-900 dark:text-white">{results.overall.total_comments}</p>
+                        </div>
                       </div>
                     </>
                   ) : (
                     <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={currentData.hourly}>
+                      <LineChart data={hourlyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                        <XAxis dataKey="hour" stroke="#9CA3AF" />
+                        <XAxis dataKey="hour" stroke="#9CA3AF" tick={{ fontSize: 10 }} />
                         <YAxis stroke="#9CA3AF" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#1F2937',
-                            border: 'none',
-                            borderRadius: '8px',
-                            color: '#fff',
-                          }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="sentiment"
-                          stroke="#3B82F6"
-                          strokeWidth={3}
-                          dot={{ fill: '#3B82F6', r: 4 }}
-                          name="Sentiment"
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="confidence"
-                          stroke="#10B981"
-                          strokeWidth={2}
-                          dot={{ fill: '#10B981', r: 3 }}
-                          name="Confidence"
-                        />
+                        <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                        <Line type="monotone" dataKey="sentiment"  stroke="#3B82F6" strokeWidth={3} dot={{ fill: '#3B82F6', r: 4 }} name="Sentiment" />
+                        <Line type="monotone" dataKey="confidence" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} name="Confidence" />
                       </LineChart>
                     </ResponsiveContainer>
                   )}
