@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Database, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Database, Loader2, CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -7,14 +7,8 @@ import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveCon
 import { motion, AnimatePresence } from 'motion/react';
 import { dataApi, ExchangeInfo, CoinInfo, OHLCVCandle, OHLCVResponse } from '../../../services/api';
 
-const timeframes = [
-  { value: '1m', label: '1 Minute' },
-  { value: '5m', label: '5 Minutes' },
-  { value: '15m', label: '15 Minutes' },
-  { value: '1h', label: '1 Hour' },
-  { value: '4h', label: '4 Hours' },
-  { value: '1d', label: '1 Day' },
-];
+// Fixed timeframe — 1-minute candles only
+const FIXED_TIMEFRAME = '1m';
 
 const Candlestick = (props: any) => {
   const { x, y, width, height, payload } = props;
@@ -37,8 +31,8 @@ const Candlestick = (props: any) => {
 
   return (
     <g>
-      <line x1={centerX} y1={highY}    x2={centerX} y2={topWick}    stroke={color} strokeWidth={1.5} />
-      <line x1={centerX} y1={bottomWick} x2={centerX} y2={lowY}    stroke={color} strokeWidth={1.5} />
+      <line x1={centerX} y1={highY}      x2={centerX} y2={topWick}    stroke={color} strokeWidth={1.5} />
+      <line x1={centerX} y1={bottomWick} x2={centerX} y2={lowY}       stroke={color} strokeWidth={1.5} />
       <rect
         x={centerX - candleWidth / 2}
         y={bodyTop}
@@ -52,23 +46,35 @@ const Candlestick = (props: any) => {
   );
 };
 
+// ── Date input helper ─────────────────────────────────────────────────────────
+// Returns today's date as YYYY-MM-DD
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function DataTab() {
   // ── Dropdowns ────────────────────────────────────────────────────────────
   const [exchanges, setExchanges]   = useState<ExchangeInfo[]>([]);
   const [coins, setCoins]           = useState<CoinInfo[]>([]);
   const [exchange, setExchange]     = useState('');
   const [coin, setCoin]             = useState('');
-  const [timeframe, setTimeframe]   = useState('1h');
+
+  // ── Date range ───────────────────────────────────────────────────────────
+  const [startDate, setStartDate]   = useState('2024-01-01');
+  const [endDate, setEndDate]       = useState(todayStr());
+  const [startDateLocked, setStartDateLocked] = useState(false); // true when DB has data
+  const [lastDbDate, setLastDbDate] = useState<string | null>(null);
 
   // ── UI state ─────────────────────────────────────────────────────────────
-  const [isFetching, setIsFetching]   = useState(false);   // POST /data/fetch
-  const [isLoadingChart, setIsLoadingChart] = useState(false); // GET /data/ohlcv
-  const [showChart, setShowChart]     = useState(false);
-  const [fetchMsg, setFetchMsg]       = useState('');
-  const [error, setError]             = useState('');
+  const [isFetching, setIsFetching]         = useState(false);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [isCheckingDb, setIsCheckingDb]     = useState(false);
+  const [showChart, setShowChart]           = useState(false);
+  const [fetchMsg, setFetchMsg]             = useState('');
+  const [error, setError]                   = useState('');
 
   // ── Chart data ────────────────────────────────────────────────────────────
-  const [ohlcvData, setOhlcvData]   = useState<OHLCVResponse | null>(null);
+  const [ohlcvData, setOhlcvData] = useState<OHLCVResponse | null>(null);
 
   // ── Load exchanges on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -85,38 +91,92 @@ export function DataTab() {
       .catch(() => setError('Failed to load coins'));
   }, [exchange]);
 
-  // ── Reload chart when timeframe changes (if data already fetched) ─────────
+  // ── When coin changes: check DB for last date, then auto-load chart ───────
   useEffect(() => {
-    if (!showChart || !exchange || !coin) return;
-    loadChart();
-  }, [timeframe]);
+    if (!exchange || !coin) {
+      setShowChart(false);
+      setOhlcvData(null);
+      setStartDateLocked(false);
+      setLastDbDate(null);
+      return;
+    }
 
-  const loadChart = async () => {
+    setError('');
+    setFetchMsg('');
+    setShowChart(false);
+    setIsCheckingDb(true);
+
+    dataApi.getLastDate(exchange, coin)
+      .then(res => {
+        if (res.last_date) {
+          // DB has data — lock start_date to last entry
+          const lockedDate = res.last_date.slice(0, 10);
+          setStartDate(lockedDate);
+          setStartDateLocked(true);
+          setLastDbDate(lockedDate);
+        } else {
+          setStartDateLocked(false);
+          setLastDbDate(null);
+        }
+      })
+      .catch(() => {
+        setStartDateLocked(false);
+        setLastDbDate(null);
+      })
+      .finally(() => {
+        setIsCheckingDb(false);
+        // Auto-load chart regardless (will show error if no data)
+        loadChart(exchange, coin);
+      });
+  }, [exchange, coin]);
+
+  const loadChart = useCallback(async (exch: string, sym: string) => {
     setIsLoadingChart(true);
     setError('');
     try {
-      const data = await dataApi.getOHLCV(exchange, coin, timeframe);
+      const data = await dataApi.getOHLCV(exch, sym, FIXED_TIMEFRAME);
       setOhlcvData(data);
+      setShowChart(true);
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load chart data');
+      setOhlcvData(null);
+      setShowChart(false);
+      // Only show error if it's not a "no data yet" 404
+      if (!e.message?.toLowerCase().includes('fetch data first') &&
+          !e.message?.toLowerCase().includes('not found')) {
+        setError(e.message ?? 'Failed to load chart data');
+      }
     } finally {
       setIsLoadingChart(false);
     }
-  };
+  }, []);
 
   const handleFetchData = async () => {
     if (!exchange || !coin) return;
     setIsFetching(true);
-    setShowChart(false);
     setError('');
     setFetchMsg('');
 
     try {
-      const res = await dataApi.fetchData({ exchange, symbol: coin });
+      const res = await dataApi.fetchData({
+        exchange,
+        symbol: coin,
+        start_date: startDate,
+        end_date: endDate,
+      });
       setFetchMsg(res.message);
-      // Now load the chart
-      await loadChart();
-      setShowChart(true);
+      // Reload chart after fetch
+      await loadChart(exchange, coin);
+      // Refresh last-date info
+      dataApi.getLastDate(exchange, coin)
+        .then(r => {
+          if (r.last_date) {
+            const lockedDate = r.last_date.slice(0, 10);
+            setStartDate(lockedDate);
+            setStartDateLocked(true);
+            setLastDbDate(lockedDate);
+          }
+        })
+        .catch(() => {});
     } catch (e: any) {
       setError(e.message ?? 'Fetch failed');
     } finally {
@@ -143,7 +203,8 @@ export function DataTab() {
           <CardTitle>Data Source</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Row 1: Exchange + Coin */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Exchange */}
             <div>
               <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Exchange</label>
@@ -173,20 +234,52 @@ export function DataTab() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            {/* Timeframe */}
+          {/* Row 2: Start date + End date + locked badge */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Start Date */}
             <div>
-              <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Timeframe</label>
-              <Select value={timeframe} onValueChange={setTimeframe}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {timeframes.map((tf) => (
-                    <SelectItem key={tf.value} value={tf.value}>{tf.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 mb-2">
+                <label className="text-sm text-gray-600 dark:text-gray-400">Start Date</label>
+                {startDateLocked && (
+                  <span className="text-xs bg-blue-500/15 text-blue-500 border border-blue-500/30 rounded px-2 py-0.5 flex items-center gap-1">
+                    <CalendarIcon className="w-3 h-3" />
+                    Auto-set from DB
+                  </span>
+                )}
+              </div>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                disabled={startDateLocked || isCheckingDb}
+                className={`w-full h-10 px-3 rounded-md border text-sm bg-white dark:bg-[#0B0F19]
+                  text-gray-900 dark:text-white transition-colors
+                  ${startDateLocked
+                    ? 'border-blue-500/40 opacity-70 cursor-not-allowed'
+                    : 'border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500'}
+                `}
+              />
+              {startDateLocked && lastDbDate && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Continuing from last DB entry: <span className="text-blue-400 font-medium">{lastDbDate}</span>
+                </p>
+              )}
+            </div>
+
+            {/* End Date */}
+            <div>
+              <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">End Date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                min={startDate}
+                className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-700
+                  text-sm bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              />
             </div>
           </div>
 
@@ -200,7 +293,7 @@ export function DataTab() {
           <Button
             className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600"
             onClick={handleFetchData}
-            disabled={!exchange || !coin || isFetching}
+            disabled={!exchange || !coin || isFetching || isCheckingDb}
           >
             {isFetching ? (
               <>
@@ -217,6 +310,7 @@ export function DataTab() {
         </CardContent>
       </Card>
 
+      {/* Fetching loader */}
       <AnimatePresence>
         {isFetching && (
           <motion.div
@@ -237,10 +331,29 @@ export function DataTab() {
         )}
       </AnimatePresence>
 
+      {/* Chart loading skeleton (when coin selected but no data yet) */}
       <AnimatePresence>
-        {showChart && !isFetching && ohlcvData && (
+        {isLoadingChart && !isFetching && (
           <motion.div
-            key={timeframe}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+              <CardContent className="p-12 flex flex-col items-center justify-center">
+                <Loader2 className="w-10 h-10 text-blue-400 animate-spin mb-3" />
+                <p className="text-sm text-gray-500 dark:text-gray-400">Loading chart...</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Chart */}
+      <AnimatePresence>
+        {showChart && !isFetching && !isLoadingChart && ohlcvData && (
+          <motion.div
+            key={`${exchange}-${coin}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -249,23 +362,9 @@ export function DataTab() {
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
                 <CardTitle>
                   Candlestick Chart – {coin.toUpperCase()}
+                  <span className="ml-2 text-sm font-normal text-gray-400 dark:text-gray-500">1m</span>
                   {isLoadingChart && <Loader2 className="inline w-4 h-4 ml-2 animate-spin text-blue-500" />}
                 </CardTitle>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {timeframes.map((tf) => (
-                    <button
-                      key={tf.value}
-                      onClick={() => setTimeframe(tf.value)}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-all ${
-                        timeframe === tf.value
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {tf.value.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
               </CardHeader>
 
               <CardContent>

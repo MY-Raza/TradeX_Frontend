@@ -1,4 +1,3 @@
-
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
@@ -24,10 +23,12 @@ export interface OHLCVResponse {
   open: number; high: number; low: number; close: number; total_volume: number;
 }
 export interface FetchResponse { exchange: string; symbol: string; rows_saved: number; message: string }
+export interface LastDateResponse { exchange: string; symbol: string; last_date: string | null }
 
 export const dataApi = {
   getExchanges: ()                                     => req<ExchangeInfo[]>('/data/exchanges'),
   getCoins:     (exchange: string)                     => req<CoinInfo[]>(`/data/coins/${exchange}`),
+  getLastDate:  (exchange: string, symbol: string)     => req<LastDateResponse>(`/data/last-date?exchange=${exchange}&symbol=${symbol}`),
   fetchData:    (body: { exchange: string; symbol: string; start_date?: string; end_date?: string }) =>
     req<FetchResponse>('/data/fetch', { method: 'POST', body: JSON.stringify(body) }),
   getOHLCV:     (exchange: string, symbol: string, timeframe: string) =>
