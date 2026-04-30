@@ -173,13 +173,13 @@ export function DashboardTab() {
             >
               <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800 hover:shadow-lg transition-shadow">
                 <CardContent className="p-6">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{kpi.label}</p>
-                      <p className="font-bold mt-2 text-gray-900 dark:text-white leading-tight break-all text-2xl xl:text-3xl">{kpi.value}</p>
+                      <p className="font-bold mt-2 text-gray-900 dark:text-white leading-tight whitespace-nowrap text-lg lg:text-xl 2xl:text-2xl">{kpi.value}</p>
                     </div>
-                    <div className={`p-3 rounded-xl bg-${kpi.color}-500/10 shrink-0`}>
-                      <Icon className={`w-6 h-6 text-${kpi.color}-500`} />
+                    <div className={`p-2.5 rounded-xl bg-${kpi.color}-500/10 shrink-0`}>
+                      <Icon className={`w-5 h-5 text-${kpi.color}-500`} />
                     </div>
                   </div>
                 </CardContent>
