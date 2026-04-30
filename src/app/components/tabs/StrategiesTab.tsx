@@ -109,7 +109,7 @@ function StrategyModal({
                 ))}
                 {strategy.patterns.map((pat) => (
                   <Badge key={pat} className="bg-purple-500/10 text-purple-400 border-purple-500/20 text-xs">
-                    {pat}
+                    {pat.toUpperCase()}
                   </Badge>
                 ))}
               </div>
@@ -184,7 +184,7 @@ function StrategyModal({
                     <div className="flex flex-wrap gap-2 p-4 bg-[#0B0F19] border border-gray-800 rounded-xl">
                       {detail.patterns.map((p) => (
                         <Badge key={p} className="bg-purple-500/10 text-purple-400 border-purple-500/20">
-                          {p}
+                          {p.toUpperCase()}
                         </Badge>
                       ))}
                     </div>
@@ -410,7 +410,7 @@ export function StrategiesTab() {
                         ))}
                         {strategy.patterns.slice(0, 4).map((pat) => (
                           <Badge key={pat} className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
-                            {pat}
+                            {pat.toUpperCase()}
                           </Badge>
                         ))}
                         {(strategy.indicators.length + strategy.patterns.length) > 12 && (
