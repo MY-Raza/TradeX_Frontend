@@ -133,9 +133,10 @@ export function DashboardTab() {
     },
     {
       label: 'Top Strategy PnL',
+      // ✅ Added $ sign before PnL value in KPI card
       value:
         data?.topStrategies[0]?.pnl_sum != null
-          ? `${data.topStrategies[0].pnl_sum >= 0 ? '+' : ''}${data.topStrategies[0].pnl_sum.toFixed(2)}`
+          ? `${data.topStrategies[0].pnl_sum >= 0 ? '+' : ''}$${data.topStrategies[0].pnl_sum.toFixed(2)}`
           : '–',
       icon: data?.topStrategies[0]?.pnl_sum != null && data.topStrategies[0].pnl_sum >= 0
         ? TrendingUp
@@ -200,11 +201,11 @@ export function DashboardTab() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data.pnlChartData} layout="vertical" margin={{ left: 8, right: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                  <XAxis type="number" stroke="#9CA3AF" tickFormatter={(v) => `${v}`} />
+                  <XAxis type="number" stroke="#9CA3AF" tickFormatter={(v) => `$${v}`} />
                   <YAxis type="category" dataKey="name" stroke="#9CA3AF" width={100} tick={{ fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                    formatter={(v: number) => [`${v >= 0 ? '+' : ''}${v}`, 'PnL']}
+                    formatter={(v: number) => [`${v >= 0 ? '+' : ''}$${v}`, 'PnL']}
                   />
                   <Bar
                     dataKey="pnl"
@@ -274,13 +275,14 @@ export function DashboardTab() {
                         </p>
                       </div>
                     </div>
+                    {/* ✅ Added $ sign before PnL value in top strategies table */}
                     <span
                       className={`text-sm font-bold ${
                         (s.pnl_sum ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
                       }`}
                     >
                       {s.pnl_sum !== null
-                        ? `${s.pnl_sum >= 0 ? '+' : ''}${s.pnl_sum.toFixed(2)}`
+                        ? `${s.pnl_sum >= 0 ? '+' : ''}$${s.pnl_sum.toFixed(2)}`
                         : '–'}
                     </span>
                   </div>

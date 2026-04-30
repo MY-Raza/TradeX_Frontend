@@ -92,7 +92,8 @@ function StrategyModal({
                           : 'bg-red-500/15 text-red-400 border-red-500/30'
                       }
                     >
-                      PnL: {pnlPositive ? '+' : ''}{fmt(strategy.pnl_sum)}
+                      {/* ✅ Added $ sign before PnL value */}
+                      PnL: {pnlPositive ? '+' : ''}${fmt(strategy.pnl_sum)}
                     </Badge>
                   )}
                 </div>
@@ -390,7 +391,8 @@ export function StrategiesTab() {
                             <Badge variant="outline" className="text-xs">{strategy.time_horizon}</Badge>
                             {strategy.pnl_sum !== null && (
                               <Badge className={`text-xs ${strategy.pnl_sum >= 0 ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
-                                PnL: {strategy.pnl_sum >= 0 ? '+' : ''}{fmt(strategy.pnl_sum)}
+                                {/* ✅ Added $ sign before PnL value */}
+                                PnL: {strategy.pnl_sum >= 0 ? '+' : ''}${fmt(strategy.pnl_sum)}
                               </Badge>
                             )}
                           </div>
