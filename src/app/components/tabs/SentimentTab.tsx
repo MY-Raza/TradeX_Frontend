@@ -114,17 +114,17 @@ export function SentimentTab() {
       className="space-y-6"
     >
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex flex-col gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sentiment Analysis</h2>
           <p className="text-gray-500 dark:text-gray-400 mt-1">Reddit sentiment tracking</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="w-56">
+        <div className="flex items-center gap-2 w-full">
+          <div className="flex-1 min-w-0">
             <Select value={selectedCoin} onValueChange={setSelectedCoin}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <div className="flex items-center gap-2">
-                  <Coins className="w-4 h-4" />
+                  <Coins className="w-4 h-4 shrink-0" />
                   <SelectValue placeholder="Select coin" />
                 </div>
               </SelectTrigger>
@@ -140,6 +140,7 @@ export function SentimentTab() {
           {results && (
             <Button
               variant="outline"
+              className="shrink-0"
               onClick={() => {
                 setIsFetchingCached(true);
                 sentimentApi.getResults(selectedCoin)
@@ -154,7 +155,7 @@ export function SentimentTab() {
           )}
 
           <Button
-            className="bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600"
+            className="shrink-0 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600"
             onClick={handleAnalyze}
             disabled={isAnalyzing || !selectedCoin}
           >
