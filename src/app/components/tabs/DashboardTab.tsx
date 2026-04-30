@@ -249,87 +249,90 @@ export function DashboardTab() {
         </Card>
       </div>
 
-      {/* Top Strategies Table */}
-      <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
-        <CardHeader>
-          <CardTitle>Top Performing Strategies</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data?.topStrategies && data.topStrategies.length > 0 ? (
-            <div className="space-y-3">
-              {data.topStrategies.map((s, i) => (
-                <div
-                  key={s.name}
-                  className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-[#0B0F19] hover:bg-gray-100 dark:hover:bg-[#111827] transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {s.symbol.toUpperCase()} · {s.time_horizon}
-                        {s.indicators.length > 0 && ` · ${s.indicators.slice(0, 2).join(', ')}`}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-sm font-bold ${
-                      (s.pnl_sum ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
-                    }`}
+      {/* Top Strategies + Top Models side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Strategies Table */}
+        <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+          <CardHeader>
+            <CardTitle>Top Performing Strategies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.topStrategies && data.topStrategies.length > 0 ? (
+              <div className="space-y-3">
+                {data.topStrategies.map((s, i) => (
+                  <div
+                    key={s.name}
+                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-[#0B0F19] hover:bg-gray-100 dark:hover:bg-[#111827] transition-colors"
                   >
-                    {s.pnl_sum !== null
-                      ? `${s.pnl_sum >= 0 ? '+' : ''}${s.pnl_sum.toFixed(2)}`
-                      : '–'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm text-center py-6">No strategies available</p>
-          )}
-        </CardContent>
-      </Card>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {s.symbol.toUpperCase()} · {s.time_horizon}
+                          {s.indicators.length > 0 && ` · ${s.indicators.slice(0, 2).join(', ')}`}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-sm font-bold ${
+                        (s.pnl_sum ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                      }`}
+                    >
+                      {s.pnl_sum !== null
+                        ? `${s.pnl_sum >= 0 ? '+' : ''}${s.pnl_sum.toFixed(2)}`
+                        : '–'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 text-sm text-center py-6">No strategies available</p>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Top Models Table */}
-      <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
-        <CardHeader>
-          <CardTitle>Top Performing Models</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data?.topModels && data.topModels.length > 0 ? (
-            <div className="space-y-3">
-              {data.topModels.map((m, i) => (
-                <div
-                  key={m.model_name}
-                  className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-[#0B0F19] hover:bg-gray-100 dark:hover:bg-[#111827] transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{m.model_name}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {m.total_trades != null ? `${m.total_trades} trades` : ''}
-                        {m.win_rate != null ? ` · ${(m.win_rate * 100).toFixed(1)}% win rate` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-sm font-bold ${
-                      (m.pnl ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
-                    }`}
+        {/* Top Models Table */}
+        <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+          <CardHeader>
+            <CardTitle>Top Performing Models</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data?.topModels && data.topModels.length > 0 ? (
+              <div className="space-y-3">
+                {data.topModels.map((m, i) => (
+                  <div
+                    key={m.model_name}
+                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-[#0B0F19] hover:bg-gray-100 dark:hover:bg-[#111827] transition-colors"
                   >
-                    {m.pnl !== null
-                      ? `${m.pnl >= 0 ? '+' : ''}${m.pnl.toFixed(2)}`
-                      : '–'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-400 text-sm text-center py-6">No model data available</p>
-          )}
-        </CardContent>
-      </Card>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-gray-400 w-5">#{i + 1}</span>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{m.model_name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {m.total_trades != null ? `${m.total_trades} trades` : ''}
+                          {m.win_rate != null ? ` · ${(m.win_rate * 100).toFixed(1)}% win rate` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-sm font-bold ${
+                        (m.pnl ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
+                      }`}
+                    >
+                      {m.pnl !== null
+                        ? `${m.pnl >= 0 ? '+' : ''}${m.pnl.toFixed(2)}`
+                        : '–'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-400 text-sm text-center py-6">No model data available</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Quick Actions */}
       <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
