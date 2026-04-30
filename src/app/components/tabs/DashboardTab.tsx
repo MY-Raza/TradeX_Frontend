@@ -232,7 +232,7 @@ export function DashboardTab() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={data.winRateData} layout="vertical" margin={{ left: 8, right: 24 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
-                  <XAxis type="number" stroke="#9CA3AF" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                  <XAxis type="number" stroke="#9CA3AF" domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.1)]} tickFormatter={(v) => `${v}%`} />
                   <YAxis type="category" dataKey="name" stroke="#9CA3AF" width={100} tick={{ fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
