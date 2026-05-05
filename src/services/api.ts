@@ -1,4 +1,18 @@
+// ---------------------------------------------------------------------------
+// IMPORTANT – set VITE_API_URL in your Vercel project environment variables:
+//   VITE_API_URL = https://<your-railway-app>.railway.app
+//
+// Without this, production calls will hit localhost and fail silently.
+// ---------------------------------------------------------------------------
+
 const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
+
+if (import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
+  console.warn(
+    '[api.ts] VITE_API_URL is not set – using http://127.0.0.1:8000. ' +
+    'Set this env var in Vercel for production.'
+  );
+}
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -40,7 +54,6 @@ export const dataApi = {
 export interface StrategyListItem {
   name: string; symbol: string; time_horizon: string;
   indicators: string[]; patterns: string[]; pnl_sum: number | null;
-  // Most-recent backtest stats (populated by backtest_service after a run)
   last_pnl_pct: number | null; last_run_tp: number | null; last_run_sl: number | null;
 }
 export interface StrategyDetail extends StrategyListItem {
@@ -127,13 +140,13 @@ export interface BacktestSummary {
   total_trades: number; win_trades: number; loss_trades: number;
   win_rate: number; loss_rate: number;
   max_consecutive_wins: number; max_consecutive_losses: number;
+  run_table_name: string | null;
 }
 export interface BacktestResponse {
   summary: BacktestSummary; ledger: LedgerEntry[];
   win_loss_data: WinLossPoint[]; pnl_data: PnLPoint[];
 }
 
-// Saved-run metadata (GET /backtest/runs/{strategy})
 export interface LedgerRunMeta {
   run_id: number; table_name: string;
   strategy_name: string; exchange: string;
@@ -144,7 +157,6 @@ export interface LedgerRunMeta {
   created_at: string;
 }
 
-// Paginated ledger (GET /backtest/runs/{strategy}/{run_id}/ledger)
 export interface PaginatedLedger {
   run_meta: LedgerRunMeta;
   entries: LedgerEntry[];
@@ -161,11 +173,9 @@ export const backtestApi = {
     buy_after_minutes?: number; fee?: number; leverage?: number; slippage?: number;
   }) => req<BacktestResponse>('/backtest/run', { method: 'POST', body: JSON.stringify(body) }),
 
-  // GET /backtest/runs/{strategy_name}  – list of saved runs
   getStrategyRuns: (strategyName: string) =>
     req<LedgerRunMeta[]>(`/backtest/runs/${encodeURIComponent(strategyName)}`),
 
-  // GET /backtest/runs/{strategy_name}/{run_id}/ledger  – paginated ledger
   getRunLedger: (strategyName: string, runId: number, page = 1, pageSize = 50) => {
     const q = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     return req<PaginatedLedger>(

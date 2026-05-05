@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Search, ChevronLeft, ChevronRight, TrendingUp, Loader2, X,
-  ShieldCheck, Target, History, BarChart2,
+  ShieldCheck, Target, BarChart2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -51,7 +51,6 @@ function LedgerView({
 
   return (
     <div className="space-y-4">
-      {/* Back button + run header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="sm" onClick={onBack} className="text-gray-400 hover:text-white">
           <ChevronLeft className="w-4 h-4 mr-1" /> Back to runs
@@ -255,10 +254,7 @@ function StrategyModal({
   }, [onClose]);
 
   const pnlPositive = (strategy.pnl_sum ?? 0) >= 0;
-
-  // ── Backtest stats from strategy list item ────────────────────────────
-  const hasBacktestStats =
-    strategy.last_pnl_pct !== null && strategy.last_pnl_pct !== undefined;
+  const hasBacktestStats = strategy.last_pnl_pct !== null && strategy.last_pnl_pct !== undefined;
   const btPnlPositive = (strategy.last_pnl_pct ?? 0) >= 0;
 
   return (
@@ -306,7 +302,6 @@ function StrategyModal({
                       PnL: {pnlPositive ? '+' : ''}${fmt(strategy.pnl_sum)}
                     </Badge>
                   )}
-                  {/* Most-recent backtest stats */}
                   {hasBacktestStats && (
                     <Badge className={btPnlPositive ? 'bg-green-500/15 text-green-400 border-green-500/30' : 'bg-red-500/15 text-red-400 border-red-500/30'}>
                       <BarChart2 className="w-3 h-3 mr-1" />
@@ -317,7 +312,6 @@ function StrategyModal({
               </div>
             </div>
 
-            {/* Indicator & Pattern badges */}
             {(strategy.indicators.length > 0 || strategy.patterns.length > 0) && (
               <div className="mt-4 flex flex-wrap gap-2">
                 {strategy.indicators.map((ind) => (
@@ -364,7 +358,6 @@ function StrategyModal({
 
                 {detail && !isLoading && (
                   <>
-                    {/* Most-recent backtest stats banner */}
                     {hasBacktestStats && (
                       <div className="grid grid-cols-3 gap-3 p-4 bg-[#0B0F19] border border-gray-800 rounded-xl">
                         <div>
@@ -388,7 +381,6 @@ function StrategyModal({
                       </div>
                     )}
 
-                    {/* TP / SL */}
                     {(detail.tp || detail.sl) && (
                       <div className="grid grid-cols-2 gap-4">
                         {detail.tp && (
@@ -412,7 +404,6 @@ function StrategyModal({
                       </div>
                     )}
 
-                    {/* Indicator Parameters */}
                     {Object.keys(detail.indicator_details).length > 0 && (
                       <div>
                         <h3 className="text-sm font-semibold text-white mb-3">Indicator Parameters</h3>
@@ -438,7 +429,6 @@ function StrategyModal({
                       </div>
                     )}
 
-                    {/* Active Patterns */}
                     {detail.patterns.length > 0 && (
                       <div>
                         <h3 className="text-sm font-semibold text-white mb-3">Active Patterns</h3>
@@ -497,11 +487,12 @@ export function StrategiesTab() {
   const [isLoading, setIsLoading]     = useState(false);
   const [error, setError]             = useState('');
 
-  const [modalStrategy, setModalStrategy]       = useState<StrategyListItem | null>(null);
-  const [modalDetail, setModalDetail]           = useState<StrategyDetail | null>(null);
+  const [modalStrategy, setModalStrategy]               = useState<StrategyListItem | null>(null);
+  const [modalDetail, setModalDetail]                   = useState<StrategyDetail | null>(null);
   const [isModalDetailLoading, setIsModalDetailLoading] = useState(false);
-  const [detailCache, setDetailCache]           = useState<Record<string, StrategyDetail>>({});
+  const [detailCache, setDetailCache]                   = useState<Record<string, StrategyDetail>>({});
 
+  // Load filter options once on mount
   useEffect(() => {
     strategiesApi.getFilters()
       .then(setFilters)
@@ -530,12 +521,12 @@ export function StrategiesTab() {
     }
   }, [symbolFilter, horizonFilter, searchQuery]);
 
-  useEffect(() => { fetchStrategies(1); }, [fetchStrategies]);
-
+  // Single effect: debounce search queries, instant response for filter changes
   useEffect(() => {
-    const t = setTimeout(() => fetchStrategies(1), 400);
+    const delay = searchQuery ? 400 : 0;
+    const t = setTimeout(() => fetchStrategies(1), delay);
     return () => clearTimeout(t);
-  }, [searchQuery]);
+  }, [fetchStrategies]);
 
   const openModal = async (strategy: StrategyListItem) => {
     setModalStrategy(strategy);
@@ -674,7 +665,6 @@ export function StrategiesTab() {
                                   PnL: {strategy.pnl_sum >= 0 ? '+' : ''}${fmt(strategy.pnl_sum)}
                                 </Badge>
                               )}
-                              {/* Most-recent backtest badge */}
                               {hasBacktest && (
                                 <Badge className={`text-xs ${btPos ? 'bg-green-500/10 text-green-500 dark:text-green-400' : 'bg-red-500/10 text-red-500 dark:text-red-400'}`}>
                                   <BarChart2 className="w-3 h-3 mr-1 inline" />
