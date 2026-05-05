@@ -40,6 +40,8 @@ export const dataApi = {
 export interface StrategyListItem {
   name: string; symbol: string; time_horizon: string;
   indicators: string[]; patterns: string[]; pnl_sum: number | null;
+  // Most-recent backtest stats (populated by backtest_service after a run)
+  last_pnl_pct: number | null; last_run_tp: number | null; last_run_sl: number | null;
 }
 export interface StrategyDetail extends StrategyListItem {
   tp: string | null; sl: string | null;
@@ -110,6 +112,7 @@ export const modelsApi = {
 export interface BacktestStrategyOption {
   name: string; symbol: string; time_horizon: string;
   tp: string | null; sl: string | null;
+  last_pnl_pct: number | null; last_run_tp: number | null; last_run_sl: number | null;
 }
 export interface LedgerEntry {
   date: string; type: string; price: number;
@@ -130,13 +133,45 @@ export interface BacktestResponse {
   win_loss_data: WinLossPoint[]; pnl_data: PnLPoint[];
 }
 
+// Saved-run metadata (GET /backtest/runs/{strategy})
+export interface LedgerRunMeta {
+  run_id: number; table_name: string;
+  strategy_name: string; exchange: string;
+  start_date: string | null; end_date: string | null;
+  take_profit: number; stop_loss: number;
+  total_trades: number; win_rate: number;
+  total_pnl_pct: number; final_balance: number;
+  created_at: string;
+}
+
+// Paginated ledger (GET /backtest/runs/{strategy}/{run_id}/ledger)
+export interface PaginatedLedger {
+  run_meta: LedgerRunMeta;
+  entries: LedgerEntry[];
+  page: number; page_size: number; total: number; pages: number;
+}
+
 export const backtestApi = {
   getStrategies: () => req<BacktestStrategyOption[]>('/backtest/strategies'),
+
   run: (body: {
     strategy_name: string; exchange: string;
+    start_date?: string; end_date?: string;
     starting_balance?: number; take_profit?: number; stop_loss?: number;
     buy_after_minutes?: number; fee?: number; leverage?: number; slippage?: number;
   }) => req<BacktestResponse>('/backtest/run', { method: 'POST', body: JSON.stringify(body) }),
+
+  // GET /backtest/runs/{strategy_name}  – list of saved runs
+  getStrategyRuns: (strategyName: string) =>
+    req<LedgerRunMeta[]>(`/backtest/runs/${encodeURIComponent(strategyName)}`),
+
+  // GET /backtest/runs/{strategy_name}/{run_id}/ledger  – paginated ledger
+  getRunLedger: (strategyName: string, runId: number, page = 1, pageSize = 50) => {
+    const q = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+    return req<PaginatedLedger>(
+      `/backtest/runs/${encodeURIComponent(strategyName)}/${runId}/ledger?${q}`
+    );
+  },
 };
 
 // ─── Sentiment ────────────────────────────────────────────────────────────────
