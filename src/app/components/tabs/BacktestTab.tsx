@@ -14,9 +14,126 @@ import {
   BacktestStrategyOption,
   ExchangeInfo,
   BacktestResponse,
+  LedgerEntry,
   LedgerRunMeta,
   PaginatedLedger,
 } from '../../../services/api';
+
+// ── Shared ledger table row ───────────────────────────────────────────────────
+
+function LedgerRow({ entry }: { entry: LedgerEntry }) {
+  return (
+    <TableRow>
+      <TableCell className="text-xs whitespace-nowrap">{entry.date}</TableCell>
+      <TableCell>
+        <span className={`px-2 py-1 rounded text-xs font-medium ${
+          entry.type === 'Buy'
+            ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+            : 'bg-red-500/10 text-red-600 dark:text-red-400'
+        }`}>
+          {entry.type}
+        </span>
+      </TableCell>
+      <TableCell>
+        <span className={`text-xs font-medium ${entry.direction === 'long' ? 'text-green-500' : 'text-red-500'}`}>
+          {entry.direction}
+        </span>
+      </TableCell>
+      <TableCell>${entry.price.toLocaleString()}</TableCell>
+      <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
+        {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
+      </TableCell>
+      <TableCell className="text-blue-500">
+        {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
+      </TableCell>
+      <TableCell>${entry.balance.toLocaleString()}</TableCell>
+      <TableCell className="text-xs text-gray-500">{entry.reason ?? '–'}</TableCell>
+    </TableRow>
+  );
+}
+
+const INLINE_PAGE_SIZE = 25;
+
+// ── Inline paginated ledger (for run results) ─────────────────────────────────
+
+function InlineLedger({ ledger }: { ledger: LedgerEntry[] }) {
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(ledger.length / INLINE_PAGE_SIZE));
+  const slice = ledger.slice((page - 1) * INLINE_PAGE_SIZE, page * INLINE_PAGE_SIZE);
+
+  return (
+    <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle>Ledger Details</CardTitle>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            {ledger.length} total entries
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Direction</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>PnL</TableHead>
+                <TableHead>PnL Sum</TableHead>
+                <TableHead>Balance</TableHead>
+                <TableHead>Reason</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {slice.map((entry, i) => <LedgerRow key={i} entry={entry} />)}
+            </TableBody>
+          </Table>
+        </div>
+
+        {pages > 1 && (
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-xs text-gray-500">
+              Page {page} of {pages} &nbsp;·&nbsp; showing {slice.length} of {ledger.length} entries
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setPage(1)} disabled={page <= 1}
+                className="text-xs px-2"
+              >
+                «
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setPage(p => p - 1)} disabled={page <= 1}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm font-medium text-gray-300 min-w-[4rem] text-center">
+                {page} / {pages}
+              </span>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setPage(p => p + 1)} disabled={page >= pages}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                onClick={() => setPage(pages)} disabled={page >= pages}
+                className="text-xs px-2"
+              >
+                »
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ── Ledger Run Detail Modal ───────────────────────────────────────────────────
 
@@ -571,60 +688,8 @@ export function BacktestTab() {
               </div>
             )}
 
-            {/* Ledger */}
-            <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
-              <CardHeader>
-                <CardTitle>Ledger Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Direction</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>PnL</TableHead>
-                        <TableHead>PnL Sum</TableHead>
-                        <TableHead>Balance</TableHead>
-                        <TableHead>Reason</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {result.ledger.map((entry, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="text-xs whitespace-nowrap">{entry.date}</TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              entry.type === 'Buy'
-                                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                                : 'bg-red-500/10 text-red-600 dark:text-red-400'
-                            }`}>
-                              {entry.type}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className={`text-xs font-medium ${entry.direction === 'long' ? 'text-green-500' : 'text-red-500'}`}>
-                              {entry.direction}
-                            </span>
-                          </TableCell>
-                          <TableCell>${entry.price.toLocaleString()}</TableCell>
-                          <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
-                            {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
-                          </TableCell>
-                          <TableCell className="text-blue-500">
-                            {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
-                          </TableCell>
-                          <TableCell>${entry.balance.toLocaleString()}</TableCell>
-                          <TableCell className="text-xs text-gray-500">{entry.reason ?? '–'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Ledger – paginated inline */}
+            <InlineLedger ledger={result.ledger} />
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

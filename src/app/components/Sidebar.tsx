@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { LayoutDashboard, TrendingUp, Brain, PlayCircle, Database, MessageSquare, X, Menu } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Brain, PlayCircle, Database, MessageSquare, BookOpen, X, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'strategies', label: 'Strategies', icon: TrendingUp },
-  { id: 'models', label: 'Models', icon: Brain },
-  { id: 'backtest', label: 'Backtest', icon: PlayCircle },
-  { id: 'data', label: 'Data', icon: Database },
-  { id: 'sentiment', label: 'Sentiment', icon: MessageSquare },
+  { id: 'dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
+  { id: 'strategies',  label: 'Strategies',  icon: TrendingUp },
+  { id: 'models',      label: 'Models',      icon: Brain },
+  { id: 'backtest',    label: 'Backtest',    icon: PlayCircle },
+  { id: 'run-history', label: 'Run History', icon: BookOpen },
+  { id: 'data',        label: 'Data',        icon: Database },
+  { id: 'sentiment',   label: 'Sentiment',   icon: MessageSquare },
 ];
 
 interface SidebarProps {
@@ -142,7 +143,8 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </AnimatePresence>
 
       {/* ── Mobile: Bottom Tab Bar ────────────────────────────────────────────── */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-[#0F1420] border-t border-gray-200 dark:border-gray-800 flex items-center justify-around px-1 h-16">
+      {/* Note: 7 items — scrollable so all fit without crowding */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-[#0F1420] border-t border-gray-200 dark:border-gray-800 flex items-center h-16 overflow-x-auto scrollbar-none">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -150,7 +152,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <button
               key={item.id}
               onClick={() => handleTabChange(item.id)}
-              className="flex flex-col items-center justify-center gap-1 flex-1 py-2 relative"
+              className="flex flex-col items-center justify-center gap-1 min-w-[4.5rem] flex-1 py-2 relative"
             >
               {isActive && (
                 <motion.div
@@ -165,7 +167,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                 }`}
               />
               <span
-                className={`text-[10px] font-medium relative z-10 transition-colors leading-none ${
+                className={`text-[9px] font-medium relative z-10 transition-colors leading-none whitespace-nowrap ${
                   isActive ? 'text-blue-600 dark:text-cyan-400' : 'text-gray-400 dark:text-gray-500'
                 }`}
               >
