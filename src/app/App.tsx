@@ -6,6 +6,7 @@ import { DashboardTab } from './components/tabs/DashboardTab';
 import { StrategiesTab } from './components/tabs/StrategiesTab';
 import { ModelsTab } from './components/tabs/ModelsTab';
 import { BacktestTab } from './components/tabs/BacktestTab';
+import { RunHistoryTab } from './components/tabs/RunHistoryTab';
 import { DataTab } from './components/tabs/DataTab';
 import { SentimentTab } from './components/tabs/SentimentTab';
 
@@ -18,6 +19,7 @@ export default function App() {
       case 'strategies':  return <StrategiesTab />;
       case 'models':      return <ModelsTab />;
       case 'backtest':    return <BacktestTab />;
+      case 'run-history': return <RunHistoryTab />;
       case 'data':        return <DataTab />;
       case 'sentiment':   return <SentimentTab />;
       default:            return <DashboardTab />;
