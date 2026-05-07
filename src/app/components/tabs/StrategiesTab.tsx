@@ -23,6 +23,29 @@ import {
 const PAGE_SIZE = 20;
 const LEDGER_PAGE_SIZE = 50;
 
+// ── Ledger helpers ────────────────────────────────────────────────────────────
+
+function formatReason(reason: string | null | undefined): string {
+  if (!reason) return '–';
+  switch (reason) {
+    case 'take_profit':      return 'TP';
+    case 'stop_loss':        return 'SL';
+    case 'direction_change': return 'Dir.Change';
+    case 'end_of_backtest':  return 'End';
+    default:                 return reason;
+  }
+}
+
+function reasonColor(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'take_profit':      return 'text-green-500';
+    case 'direction_change': return 'text-yellow-400';
+    case 'stop_loss':        return 'text-red-500';
+    case 'end_of_backtest':  return 'text-sky-300';
+    default:                 return 'text-gray-500';
+  }
+}
+
 // ── Paginated Ledger View (inside modal) ──────────────────────────────────────
 
 function LedgerView({
@@ -101,43 +124,44 @@ function LedgerView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.entries.map((entry, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="text-xs whitespace-nowrap">{entry.date}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        entry.type === 'Buy'
-                          ? 'bg-green-500/10 text-green-400'
-                          : 'bg-red-500/10 text-red-400'
-                      }`}>
-                        {entry.type}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`text-xs font-medium ${entry.direction === 'long' ? 'text-green-500' : 'text-red-500'}`}>
-                        {entry.direction}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className={`text-xs font-medium ${
-                        entry.reason === 'take_profit'      ? 'text-green-500' :
-                        entry.reason === 'direction_change' ? 'text-yellow-400' :
-                        entry.reason === 'stop_loss'        ? 'text-red-500' :
-                        'text-gray-500'
-                      }`}>
-                        {entry.reason ?? '–'}
-                      </span>
-                    </TableCell>
-                    <TableCell>${entry.price.toLocaleString()}</TableCell>
-                    <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
-                      {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
-                    </TableCell>
-                    <TableCell className="text-blue-500">
-                      {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
-                    </TableCell>
-                    <TableCell>${entry.balance.toLocaleString()}</TableCell>
-                  </TableRow>
-                ))}
+                {data.entries.map((entry, i) => {
+                  const prevBal = i > 0 ? data.entries[i - 1].balance : undefined;
+                  const balanceUp = prevBal === undefined ? null : entry.balance >= prevBal;
+                  return (
+                    <TableRow key={i}>
+                      <TableCell className="text-xs whitespace-nowrap">{entry.date}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          entry.type === 'Buy'
+                            ? 'bg-green-500/10 text-green-400'
+                            : 'bg-red-500/10 text-red-400'
+                        }`}>
+                          {entry.type}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs font-medium ${entry.direction === 'long' ? 'text-green-500' : 'text-red-500'}`}>
+                          {entry.direction}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs font-medium ${reasonColor(entry.reason)}`}>
+                          {formatReason(entry.reason)}
+                        </span>
+                      </TableCell>
+                      <TableCell>${entry.price.toLocaleString()}</TableCell>
+                      <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
+                        {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
+                      </TableCell>
+                      <TableCell className="text-blue-500">
+                        {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
+                      </TableCell>
+                      <TableCell className={balanceUp === null ? '' : balanceUp ? 'text-green-500' : 'text-red-500'}>
+                        ${entry.balance.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

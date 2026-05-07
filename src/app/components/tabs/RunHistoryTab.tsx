@@ -30,9 +30,31 @@ function fmt(v: number | null | undefined, decimals = 2, prefix = '') {
   return `${prefix}${sign}${v.toFixed(decimals)}`;
 }
 
+function formatReason(reason: string | null | undefined): string {
+  if (!reason) return '–';
+  switch (reason) {
+    case 'take_profit':      return 'TP';
+    case 'stop_loss':        return 'SL';
+    case 'direction_change': return 'Dir.Change';
+    case 'end_of_backtest':  return 'End';
+    default:                 return reason;
+  }
+}
+
+function reasonColor(reason: string | null | undefined): string {
+  switch (reason) {
+    case 'take_profit':      return 'text-green-500';
+    case 'direction_change': return 'text-yellow-400';
+    case 'stop_loss':        return 'text-red-500';
+    case 'end_of_backtest':  return 'text-sky-300';
+    default:                 return 'text-gray-500';
+  }
+}
+
 // ── Ledger table row ──────────────────────────────────────────────────────────
 
-function LedgerRow({ entry }: { entry: LedgerEntry }) {
+function LedgerRow({ entry, prevBalance }: { entry: LedgerEntry; prevBalance?: number }) {
+  const balanceUp = prevBalance === undefined ? null : entry.balance >= prevBalance;
   return (
     <TableRow className="hover:bg-white/[0.02] transition-colors">
       <TableCell className="text-xs whitespace-nowrap text-gray-400">{entry.date}</TableCell>
@@ -51,13 +73,8 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
         </span>
       </TableCell>
       <TableCell>
-        <span className={`text-xs font-medium ${
-          entry.reason === 'take_profit'      ? 'text-green-500' :
-          entry.reason === 'direction_change' ? 'text-yellow-400' :
-          entry.reason === 'stop_loss'        ? 'text-red-500' :
-          'text-gray-500'
-        }`}>
-          {entry.reason ?? '–'}
+        <span className={`text-xs font-medium ${reasonColor(entry.reason)}`}>
+          {formatReason(entry.reason)}
         </span>
       </TableCell>
       <TableCell className="font-mono text-sm">${entry.price.toLocaleString()}</TableCell>
@@ -67,7 +84,9 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
       <TableCell className="font-mono text-sm text-blue-400">
         {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
       </TableCell>
-      <TableCell className="font-mono text-sm">${entry.balance.toLocaleString()}</TableCell>
+      <TableCell className={`font-mono text-sm ${balanceUp === null ? '' : balanceUp ? 'text-green-500' : 'text-red-500'}`}>
+        ${entry.balance.toLocaleString()}
+      </TableCell>
     </TableRow>
   );
 }
@@ -173,7 +192,7 @@ function LedgerPanel({ run }: { run: LedgerRunMeta }) {
                   </TableHeader>
                   <TableBody>
                     {data.entries.map((entry, i) => (
-                      <LedgerRow key={i} entry={entry} />
+                      <LedgerRow key={i} entry={entry} prevBalance={i > 0 ? data.entries[i - 1].balance : undefined} />
                     ))}
                   </TableBody>
                 </Table>
