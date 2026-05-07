@@ -93,11 +93,11 @@ function LedgerView({
                   <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Direction</TableHead>
+                  <TableHead>Reason</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>PnL</TableHead>
                   <TableHead>PnL Sum</TableHead>
                   <TableHead>Balance</TableHead>
-                  <TableHead>Reason</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -118,6 +118,16 @@ function LedgerView({
                         {entry.direction}
                       </span>
                     </TableCell>
+                    <TableCell>
+                      <span className={`text-xs font-medium ${
+                        entry.reason === 'take_profit'      ? 'text-green-500' :
+                        entry.reason === 'direction_change' ? 'text-yellow-400' :
+                        entry.reason === 'stop_loss'        ? 'text-red-500' :
+                        'text-gray-500'
+                      }`}>
+                        {entry.reason ?? '–'}
+                      </span>
+                    </TableCell>
                     <TableCell>${entry.price.toLocaleString()}</TableCell>
                     <TableCell className={entry.pnl !== null ? (entry.pnl > 0 ? 'text-green-500' : entry.pnl < 0 ? 'text-red-500' : '') : ''}>
                       {entry.pnl !== null ? `${entry.pnl > 0 ? '+' : ''}${entry.pnl.toFixed(2)}` : '–'}
@@ -126,7 +136,6 @@ function LedgerView({
                       {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
                     </TableCell>
                     <TableCell>${entry.balance.toLocaleString()}</TableCell>
-                    <TableCell className="text-xs text-gray-500">{entry.reason ?? '–'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

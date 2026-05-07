@@ -50,6 +50,16 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
           {entry.direction}
         </span>
       </TableCell>
+      <TableCell>
+        <span className={`text-xs font-medium ${
+          entry.reason === 'take_profit'      ? 'text-green-500' :
+          entry.reason === 'direction_change' ? 'text-yellow-400' :
+          entry.reason === 'stop_loss'        ? 'text-red-500' :
+          'text-gray-500'
+        }`}>
+          {entry.reason ?? '–'}
+        </span>
+      </TableCell>
       <TableCell className="font-mono text-sm">${entry.price.toLocaleString()}</TableCell>
       <TableCell className={`font-mono text-sm ${entry.pnl !== null ? pnlColor(entry.pnl) : 'text-gray-500'}`}>
         {entry.pnl !== null ? fmt(entry.pnl) : '–'}
@@ -58,7 +68,6 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
         {entry.pnl_sum !== null ? entry.pnl_sum.toFixed(2) : '–'}
       </TableCell>
       <TableCell className="font-mono text-sm">${entry.balance.toLocaleString()}</TableCell>
-      <TableCell className="text-xs text-gray-500 max-w-[160px] truncate">{entry.reason ?? '–'}</TableCell>
     </TableRow>
   );
 }
@@ -155,11 +164,11 @@ function LedgerPanel({ run }: { run: LedgerRunMeta }) {
                       <TableHead className="text-gray-400">Date</TableHead>
                       <TableHead className="text-gray-400">Type</TableHead>
                       <TableHead className="text-gray-400">Direction</TableHead>
+                      <TableHead className="text-gray-400">Reason</TableHead>
                       <TableHead className="text-gray-400">Price</TableHead>
                       <TableHead className="text-gray-400">PnL</TableHead>
                       <TableHead className="text-gray-400">PnL Sum</TableHead>
                       <TableHead className="text-gray-400">Balance</TableHead>
-                      <TableHead className="text-gray-400">Reason</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
