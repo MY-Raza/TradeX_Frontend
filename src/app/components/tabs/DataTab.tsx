@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Database, Loader2, CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -31,7 +31,7 @@ const Candlestick = (props: any) => {
   const isGrowing  = close >= open;
   const color      = isGrowing ? '#0ECB81' : '#F6465D';
   const centerX    = x + width / 2;
-  const candleW    = Math.max(width * 0.55, 1);
+  const candleW    = Math.max(width * 0.65, 1.5);
 
   const highPx  = toPixelY(high);
   const lowPx   = toPixelY(low);
@@ -87,6 +87,14 @@ export function DataTab() {
 
   // ── Chart data ────────────────────────────────────────────────────────────
   const [ohlcvData, setOhlcvData] = useState<OHLCVResponse | null>(null);
+
+  // ── Zoom / pan state ──────────────────────────────────────────────────────
+  const MIN_VISIBLE_CANDLES = 20;
+  const [visibleStartIndex, setVisibleStartIndex] = useState(0);
+  const [visibleEndIndex, setVisibleEndIndex]     = useState(0);
+  const isDragging   = useRef(false);
+  const dragStartX   = useRef(0);
+  const dragStartIdx = useRef(0);
 
   // ── Chart date filter — sent to the API on change ─────────────────────────
   const [chartFromDate, setChartFromDate] = useState('');
@@ -230,22 +238,84 @@ export function DataTab() {
   // All candles come pre-filtered from the API — no client-side slicing needed
   const candlestickData = ohlcvData?.candles ?? [];
 
+  // ── Initialise / reset visible window when data changes ──────────────────
+  useEffect(() => {
+    if (candlestickData.length === 0) return;
+    setVisibleStartIndex(0);
+    setVisibleEndIndex(candlestickData.length - 1);
+  }, [candlestickData.length]);
+
+  // ── Derive the slice currently on screen ─────────────────────────────────
+  const visibleCandles = candlestickData.slice(visibleStartIndex, visibleEndIndex + 1);
+
+  // ── Dynamic Y-domain based only on visible candles ────────────────────────
   const yDomain: [number, number] = (() => {
-    if (!candlestickData.length) return [0, 1];
-
-    const lows = candlestickData.map((c: any) => c.low);
-    const highs = candlestickData.map((c: any) => c.high);
-
-    const minPrice = Math.min(...lows);
-    const maxPrice = Math.max(...highs);
-
-    const range = maxPrice - minPrice;
-
-    // Binance-like tight scaling
-    const pad = range * 0.05;
-
+    const data = visibleCandles.length ? visibleCandles : candlestickData;
+    if (!data.length) return [0, 1];
+    const minPrice = Math.min(...data.map((c: any) => c.low));
+    const maxPrice = Math.max(...data.map((c: any) => c.high));
+    const range    = maxPrice - minPrice;
+    const pad      = range * 0.025;          // tighter padding → larger candles
     return [minPrice - pad, maxPrice + pad];
   })();
+
+  // ── Mouse wheel zoom ──────────────────────────────────────────────────────
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const total   = candlestickData.length;
+    if (!total) return;
+
+    const visibleCount = visibleEndIndex - visibleStartIndex + 1;
+    const zoomFactor   = e.deltaY > 0 ? 1.15 : 0.87;   // scroll-down = zoom out, scroll-up = zoom in
+    const newCount     = Math.round(visibleCount * zoomFactor);
+    const clampedCount = Math.min(Math.max(newCount, MIN_VISIBLE_CANDLES), total);
+
+    // Keep zoom centred around mouse cursor position within the chart
+    const rect        = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const ratio       = (e.clientX - rect.left) / rect.width;
+    const centerIdx   = visibleStartIndex + Math.round(ratio * visibleCount);
+
+    let newStart = Math.round(centerIdx - ratio * clampedCount);
+    let newEnd   = newStart + clampedCount - 1;
+
+    // Clamp to dataset bounds
+    if (newStart < 0) { newStart = 0; newEnd = clampedCount - 1; }
+    if (newEnd >= total) { newEnd = total - 1; newStart = Math.max(0, newEnd - clampedCount + 1); }
+
+    setVisibleStartIndex(newStart);
+    setVisibleEndIndex(newEnd);
+  }, [candlestickData.length, visibleStartIndex, visibleEndIndex]);
+
+  // ── Drag / pan ────────────────────────────────────────────────────────────
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    isDragging.current   = true;
+    dragStartX.current   = e.clientX;
+    dragStartIdx.current = visibleStartIndex;
+  }, [visibleStartIndex]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging.current) return;
+    const total        = candlestickData.length;
+    if (!total) return;
+
+    const visibleCount = visibleEndIndex - visibleStartIndex + 1;
+    const rect         = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const pxPerCandle  = rect.width / visibleCount;
+    const deltaPx      = e.clientX - dragStartX.current;
+    const deltaCandles = Math.round(-deltaPx / pxPerCandle);
+
+    let newStart = dragStartIdx.current + deltaCandles;
+    let newEnd   = newStart + visibleCount - 1;
+
+    if (newStart < 0)       { newStart = 0; newEnd = visibleCount - 1; }
+    if (newEnd >= total)    { newEnd = total - 1; newStart = total - visibleCount; }
+
+    setVisibleStartIndex(newStart);
+    setVisibleEndIndex(newEnd);
+  }, [candlestickData.length, visibleEndIndex, visibleStartIndex]);
+
+  const handleMouseUp = useCallback(() => { isDragging.current = false; }, []);
+  const handleMouseLeave = useCallback(() => { isDragging.current = false; }, []);
 
   return (
     <motion.div
@@ -460,7 +530,7 @@ export function DataTab() {
                     </button>
                   )}
                   <span className="text-xs text-blue-400 whitespace-nowrap">
-                    {candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
+                    {visibleCandles.length}/{candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </CardHeader>
@@ -496,26 +566,43 @@ export function DataTab() {
                     </div>
                   ) : (
                     <>
-                      {/* Each candle gets a fixed pixel width so they never overlap.
-                          The outer div scrolls horizontally; the inner div sets the
-                          total canvas width based on candle count. */}
+                      {/* Zoom/pan wrapper — handles wheel + drag events.
+                          Candle width adapts to the visible count so candles
+                          stay readable at any zoom level. */}
                       {(() => {
-                        const CANDLE_PX = 10; // px per candle (body + gap)
-                        const Y_AXIS_W  = 70; // left margin reserved for the Y-axis
-                        const canvasW   = Math.max(candlestickData.length * CANDLE_PX + Y_AXIS_W, 600);
+                        const Y_AXIS_W      = 70;
+                        const CHART_HEIGHT  = 600;
+                        const visibleCount  = visibleCandles.length || 1;
+                        // Keep a minimum canvas width; each visible candle gets
+                        // at least 8 px so wicks render properly even zoomed out.
+                        const MIN_CANDLE_PX = 8;
+                        const canvasW = Math.max(visibleCount * MIN_CANDLE_PX + Y_AXIS_W, 600);
 
                         return (
                           <div
-                            style={{ overflowX: 'auto', overflowY: 'hidden' }}
+                            style={{ overflowX: 'hidden', overflowY: 'hidden', cursor: isDragging.current ? 'grabbing' : 'grab', userSelect: 'none' }}
                             className="w-full"
+                            onWheel={handleWheel}
+                            onMouseDown={handleMouseDown}
+                            onMouseMove={handleMouseMove}
+                            onMouseUp={handleMouseUp}
+                            onMouseLeave={handleMouseLeave}
                           >
+                            {/* Zoom level hint */}
+                            <div className="flex justify-end items-center gap-3 mb-1 px-1">
+                              <span className="text-xs text-gray-500 dark:text-gray-500 select-none">
+                                🔍 {visibleCount} candles visible · scroll to zoom · drag to pan
+                              </span>
+                            </div>
+
                             {/* Candlestick chart */}
-                            <div style={{ width: canvasW, minWidth: '100%' }}>
+                            <div style={{ width: '100%' }}>
                               <ComposedChart
                                 width={canvasW}
-                                height={600}
-                                data={candlestickData}
+                                height={CHART_HEIGHT}
+                                data={visibleCandles}
                                 margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                                style={{ transition: 'all 0.1s ease' }}
                               >
                                 <CartesianGrid
                                   stroke="#1f2937"
@@ -563,13 +650,14 @@ export function DataTab() {
                               </ComposedChart>
                             </div>
 
-                            {/* Volume chart — same canvas width so they scroll in sync */}
-                            <div style={{ width: canvasW, minWidth: '100%' }}>
+                            {/* Volume chart — same data slice */}
+                            <div style={{ width: '100%' }}>
                               <ComposedChart
                                 width={canvasW}
                                 height={120}
-                                data={candlestickData}
+                                data={visibleCandles}
                                 margin={{ top: 0, right: 10, left: 10, bottom: 10 }}
+                                style={{ transition: 'all 0.1s ease' }}
                               >
                                 <CartesianGrid
                                   stroke="#1f2937"
@@ -581,7 +669,7 @@ export function DataTab() {
                                   stroke="#9CA3AF"
                                   style={{ fontSize: 11 }}
                                   tickLine={false}
-                                  interval={Math.ceil(candlestickData.length / 12)}
+                                  interval={Math.ceil(visibleCount / 12)}
                                 />
                                 <YAxis
                                   stroke="#9CA3AF"
@@ -602,7 +690,7 @@ export function DataTab() {
                                   }}
                                 />
                                 <Bar dataKey="volume">
-                                  {candlestickData.map((entry: any, i: number) => (
+                                  {visibleCandles.map((entry: any, i: number) => (
                                     <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
                                   ))}
                                 </Bar>
