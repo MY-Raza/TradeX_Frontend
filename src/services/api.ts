@@ -45,8 +45,12 @@ export const dataApi = {
   getLastDate:  (exchange: string, symbol: string)     => req<LastDateResponse>(`/data/last-date?exchange=${exchange}&symbol=${symbol}`),
   fetchData:    (body: { exchange: string; symbol: string; start_date?: string; end_date?: string }) =>
     req<FetchResponse>('/data/fetch', { method: 'POST', body: JSON.stringify(body) }),
-  getOHLCV:     (exchange: string, symbol: string, timeframe: string) =>
-    req<OHLCVResponse>(`/data/ohlcv?exchange=${exchange}&symbol=${symbol}&timeframe=${timeframe}`),
+  getOHLCV:     (exchange: string, symbol: string, timeframe: string, startDate?: string, endDate?: string) => {
+    const q = new URLSearchParams({ exchange, symbol, timeframe });
+    if (startDate) q.set('start_date', startDate);
+    if (endDate)   q.set('end_date', endDate);
+    return req<OHLCVResponse>(`/data/ohlcv?${q}`);
+  },
 };
 
 // ─── Strategies ──────────────────────────────────────────────────────────────

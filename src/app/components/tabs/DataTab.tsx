@@ -11,9 +11,6 @@ import { dataApi, ExchangeInfo, CoinInfo, OHLCVCandle, OHLCVResponse } from '../
 const FIXED_TIMEFRAME = '1m';
 
 // Candlestick shape for Recharts <Bar>.
-// Recharts guarantees: x, y, width, height, background, value (=close), payload.
-// background.y = chart area top pixel, background.height = chart area pixel height.
-// We use those + explicitDomain to map any price to a pixel Y.
 const Candlestick = (props: any) => {
   const { x, y, width, height, background, payload, value, explicitDomain } = props;
 
@@ -25,7 +22,6 @@ const Candlestick = (props: any) => {
   const [domainMin, domainMax] = explicitDomain as [number, number];
   if (domainMax === domainMin) return null;
 
-  // background.y = top of chart area in SVG coords; background.height = total pixel height
   const chartTop    = background.y as number;
   const chartHeight = background.height as number;
 
@@ -48,11 +44,8 @@ const Candlestick = (props: any) => {
 
   return (
     <g>
-      {/* Upper wick */}
       <line x1={centerX} y1={highPx}    x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={1} />
-      {/* Lower wick */}
       <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowPx}     stroke={color} strokeWidth={1} />
-      {/* Body: hollow = bullish, filled = bearish */}
       <rect
         x={centerX - candleW / 2}
         y={bodyTop}
@@ -66,7 +59,6 @@ const Candlestick = (props: any) => {
   );
 };
 
-// ── Date input helper ─────────────────────────────────────────────────────────
 // Returns today's date as YYYY-MM-DD
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -79,10 +71,10 @@ export function DataTab() {
   const [exchange, setExchange]     = useState('');
   const [coin, setCoin]             = useState('');
 
-  // ── Date range ───────────────────────────────────────────────────────────
+  // ── Fetch date range (used by the "Fetch Data" button) ───────────────────
   const [startDate, setStartDate]   = useState('2024-01-01');
   const [endDate, setEndDate]       = useState(todayStr());
-  const [startDateLocked, setStartDateLocked] = useState(false); // true when DB has data
+  const [startDateLocked, setStartDateLocked] = useState(false);
   const [lastDbDate, setLastDbDate] = useState<string | null>(null);
 
   // ── UI state ─────────────────────────────────────────────────────────────
@@ -96,7 +88,7 @@ export function DataTab() {
   // ── Chart data ────────────────────────────────────────────────────────────
   const [ohlcvData, setOhlcvData] = useState<OHLCVResponse | null>(null);
 
-  // ── Chart date filter (client-side slice of loaded candles) ───────────────
+  // ── Chart date filter — sent to the API on change ─────────────────────────
   const [chartFromDate, setChartFromDate] = useState('');
   const [chartToDate, setChartToDate]     = useState('');
 
@@ -115,6 +107,31 @@ export function DataTab() {
       .catch(() => setError('Failed to load coins'));
   }, [exchange]);
 
+  // ── Core chart loader — accepts an explicit date range ───────────────────
+  const loadChart = useCallback(async (
+    exch: string,
+    sym: string,
+    fromDate?: string,
+    toDate?: string,
+  ) => {
+    setIsLoadingChart(true);
+    setError('');
+    try {
+      const data = await dataApi.getOHLCV(exch, sym, FIXED_TIMEFRAME, fromDate, toDate);
+      setOhlcvData(data);
+      setShowChart(true);
+    } catch (e: any) {
+      setOhlcvData(null);
+      setShowChart(false);
+      if (!e.message?.toLowerCase().includes('fetch data first') &&
+          !e.message?.toLowerCase().includes('not found')) {
+        setError(e.message ?? 'Failed to load chart data');
+      }
+    } finally {
+      setIsLoadingChart(false);
+    }
+  }, []);
+
   // ── When coin changes: check DB for last date, then auto-load chart ───────
   useEffect(() => {
     if (!exchange || !coin) {
@@ -122,18 +139,21 @@ export function DataTab() {
       setOhlcvData(null);
       setStartDateLocked(false);
       setLastDbDate(null);
+      setChartFromDate('');
+      setChartToDate('');
       return;
     }
 
     setError('');
     setFetchMsg('');
     setShowChart(false);
+    setChartFromDate('');
+    setChartToDate('');
     setIsCheckingDb(true);
 
     dataApi.getLastDate(exchange, coin)
       .then(res => {
         if (res.last_date) {
-          // DB has data — lock start_date to last entry
           const lockedDate = res.last_date.slice(0, 10);
           setStartDate(lockedDate);
           setStartDateLocked(true);
@@ -149,32 +169,16 @@ export function DataTab() {
       })
       .finally(() => {
         setIsCheckingDb(false);
-        // Auto-load chart regardless (will show error if no data)
+        // Load latest 120 candles (no date filter) on initial load
         loadChart(exchange, coin);
       });
   }, [exchange, coin]);
 
-  const loadChart = useCallback(async (exch: string, sym: string) => {
-    setIsLoadingChart(true);
-    setError('');
-    try {
-      const data = await dataApi.getOHLCV(exch, sym, FIXED_TIMEFRAME);
-      setOhlcvData(data);
-      setShowChart(true);
-      setChartFromDate('');
-      setChartToDate('');
-    } catch (e: any) {
-      setOhlcvData(null);
-      setShowChart(false);
-      // Only show error if it's not a "no data yet" 404
-      if (!e.message?.toLowerCase().includes('fetch data first') &&
-          !e.message?.toLowerCase().includes('not found')) {
-        setError(e.message ?? 'Failed to load chart data');
-      }
-    } finally {
-      setIsLoadingChart(false);
-    }
-  }, []);
+  // ── Re-fetch when chart date filter changes ───────────────────────────────
+  useEffect(() => {
+    if (!exchange || !coin || !showChart) return;
+    loadChart(exchange, coin, chartFromDate || undefined, chartToDate || undefined);
+  }, [chartFromDate, chartToDate]);
 
   const handleFetchData = async () => {
     if (!exchange || !coin) return;
@@ -190,8 +194,8 @@ export function DataTab() {
         end_date: endDate,
       });
       setFetchMsg(res.message);
-      // Reload chart after fetch
-      await loadChart(exchange, coin);
+      // Reload chart after fetch, keeping any active date filter
+      await loadChart(exchange, coin, chartFromDate || undefined, chartToDate || undefined);
       // Refresh last-date info
       dataApi.getLastDate(exchange, coin)
         .then(r => {
@@ -210,30 +214,21 @@ export function DataTab() {
     }
   };
 
-  const allCandles = ohlcvData?.candles ?? [];
+  const handleChartDateReset = () => {
+    setChartFromDate('');
+    setChartToDate('');
+    // Effect will trigger re-fetch with no date filter
+  };
 
-  // Client-side date filter — uses the dedicated ISO `date` field from the backend
-  const candlestickData = allCandles.filter((c: OHLCVCandle) => {
-    if (chartFromDate && c.date < chartFromDate) return false;
-    if (chartToDate   && c.date > chartToDate)   return false;
-    return true;
-  });
+  // All candles come pre-filtered from the API — no client-side slicing needed
+  const candlestickData = ohlcvData?.candles ?? [];
 
-  // Date bounds for the chart-filter inputs — derived from the real ISO dates
-  const candleMinDate = allCandles.length ? allCandles[0].date                              : '';
-  const candleMaxDate = allCandles.length ? allCandles[allCandles.length - 1].date : '';
-
-  const handleChartDateReset = () => { setChartFromDate(''); setChartToDate(''); };
-
-  // Compute explicit numeric domain from all candle prices so we can pass it
-  // to both YAxis and the Candlestick shape reliably
   const yDomain: [number, number] = candlestickData.length
     ? [
         Math.min(...candlestickData.map((c: any) => c.low))  - 50,
         Math.max(...candlestickData.map((c: any) => c.high)) + 50,
       ]
     : [0, 1];
-
 
   return (
     <motion.div
@@ -254,7 +249,6 @@ export function DataTab() {
         <CardContent className="space-y-4">
           {/* Row 1: Exchange + Coin */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Exchange */}
             <div>
               <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Exchange</label>
               <Select value={exchange} onValueChange={setExchange}>
@@ -269,7 +263,6 @@ export function DataTab() {
               </Select>
             </div>
 
-            {/* Coin */}
             <div>
               <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Coin</label>
               <Select value={coin} onValueChange={setCoin} disabled={!exchange}>
@@ -285,9 +278,8 @@ export function DataTab() {
             </div>
           </div>
 
-          {/* Row 2: Start date + End date + locked badge */}
+          {/* Row 2: Start date + End date */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Start Date */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <label className="text-sm text-gray-600 dark:text-gray-400">Start Date</label>
@@ -307,8 +299,7 @@ export function DataTab() {
                   text-gray-900 dark:text-white transition-colors
                   ${startDateLocked
                     ? 'border-blue-500/40 opacity-70 cursor-not-allowed'
-                    : 'border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500'}
-                `}
+                    : 'border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500'}`}
               />
               {startDateLocked && lastDbDate && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -317,7 +308,6 @@ export function DataTab() {
               )}
             </div>
 
-            {/* End Date */}
             <div>
               <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">End Date</label>
               <input
@@ -380,7 +370,7 @@ export function DataTab() {
         )}
       </AnimatePresence>
 
-      {/* Chart loading skeleton (when coin selected but no data yet) */}
+      {/* Chart loading skeleton */}
       <AnimatePresence>
         {isLoadingChart && !isFetching && (
           <motion.div
@@ -412,10 +402,9 @@ export function DataTab() {
                 <CardTitle>
                   Candlestick Chart – {coin.toUpperCase()}
                   <span className="ml-2 text-sm font-normal text-gray-400 dark:text-gray-500">1m</span>
-                  {isLoadingChart && <Loader2 className="inline w-4 h-4 ml-2 animate-spin text-blue-500" />}
                 </CardTitle>
 
-                {/* ── Chart date range filter ─────────────────────────── */}
+                {/* ── Chart date range filter — triggers API re-fetch ─── */}
                 <div className="flex items-center gap-2 flex-wrap">
                   <CalendarIcon className="w-4 h-4 text-gray-400 shrink-0" />
                   <div className="flex items-center gap-1">
@@ -453,41 +442,28 @@ export function DataTab() {
                       ✕ Reset
                     </button>
                   )}
-                  {(chartFromDate || chartToDate) && (
-                    <span className="text-xs text-blue-400 whitespace-nowrap">
-                      {candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  <span className="text-xs text-blue-400 whitespace-nowrap">
+                    {candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </CardHeader>
 
               <CardContent>
-                {/* Summary stats — update to reflect filtered range when a filter is active */}
-                {(() => {
-                  const src = candlestickData.length ? candlestickData : (ohlcvData?.candles ?? []);
-                  const isFiltered = (chartFromDate || chartToDate) && candlestickData.length > 0;
-                  const statsOpen   = isFiltered ? src[0].open                              : ohlcvData.open;
-                  const statsHigh   = isFiltered ? Math.max(...src.map((c: OHLCVCandle) => c.high)) : ohlcvData.high;
-                  const statsLow    = isFiltered ? Math.min(...src.map((c: OHLCVCandle) => c.low))  : ohlcvData.low;
-                  const statsClose  = isFiltered ? src[src.length - 1].close               : ohlcvData.close;
-                  const statsVol    = isFiltered ? src.reduce((a: number, c: OHLCVCandle) => a + c.volume, 0) : ohlcvData.total_volume;
-                  return (
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                      {[
-                        { label: 'Open',   value: `$${statsOpen.toLocaleString()}`,  color: 'text-gray-900 dark:text-white' },
-                        { label: 'High',   value: `$${statsHigh.toLocaleString()}`,  color: 'text-green-500' },
-                        { label: 'Low',    value: `$${statsLow.toLocaleString()}`,   color: 'text-red-500' },
-                        { label: 'Close',  value: `$${statsClose.toLocaleString()}`, color: 'text-gray-900 dark:text-white' },
-                        { label: 'Volume', value: statsVol.toLocaleString(),         color: 'text-blue-500' },
-                      ].map((s) => (
-                        <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
-                          <p className={`text-lg font-bold mt-1 ${s.color}`}>{s.value}</p>
-                        </div>
-                      ))}
+                {/* Summary stats */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                  {[
+                    { label: 'Open',   value: `$${ohlcvData.open.toLocaleString()}`,         color: 'text-gray-900 dark:text-white' },
+                    { label: 'High',   value: `$${ohlcvData.high.toLocaleString()}`,          color: 'text-green-500' },
+                    { label: 'Low',    value: `$${ohlcvData.low.toLocaleString()}`,           color: 'text-red-500' },
+                    { label: 'Close',  value: `$${ohlcvData.close.toLocaleString()}`,         color: 'text-gray-900 dark:text-white' },
+                    { label: 'Volume', value: ohlcvData.total_volume.toLocaleString(),        color: 'text-blue-500' },
+                  ].map((s) => (
+                    <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
+                      <p className={`text-lg font-bold mt-1 ${s.color}`}>{s.value}</p>
                     </div>
-                  );
-                })()}
+                  ))}
+                </div>
 
                 <div className="space-y-4">
                   {candlestickData.length === 0 ? (
@@ -502,82 +478,82 @@ export function DataTab() {
                       </button>
                     </div>
                   ) : (
-                  <>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="time" hide />
-                      <YAxis
-                        stroke="#9CA3AF"
-                        domain={yDomain}
-                        style={{ fontSize: 12 }}
-                        tickLine={false}
-                        tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
-                      />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0].payload as any;
-                          const up = d.close > d.open;
-                          return (
-                            <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
-                              <p className="text-gray-400 mb-2">{d.time}</p>
-                              {(['open', 'high', 'low', 'close'] as const).map((k) => (
-                                <div key={k} className="flex justify-between gap-4">
-                                  <span className="text-gray-400 capitalize">{k}:</span>
-                                  <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
-                                    ${d[k].toLocaleString()}
-                                  </span>
+                    <>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                          <XAxis dataKey="time" hide />
+                          <YAxis
+                            stroke="#9CA3AF"
+                            domain={yDomain}
+                            style={{ fontSize: 12 }}
+                            tickLine={false}
+                            tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (!active || !payload?.length) return null;
+                              const d = payload[0].payload as any;
+                              const up = d.close > d.open;
+                              return (
+                                <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
+                                  <p className="text-gray-400 mb-2">{d.time}</p>
+                                  {(['open', 'high', 'low', 'close'] as const).map((k) => (
+                                    <div key={k} className="flex justify-between gap-4">
+                                      <span className="text-gray-400 capitalize">{k}:</span>
+                                      <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+                                        ${d[k].toLocaleString()}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
+                                    <span className="text-gray-400">Volume:</span>
+                                    <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
+                                  </div>
                                 </div>
-                              ))}
-                              <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
-                                <span className="text-gray-400">Volume:</span>
-                                <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} background={{ fill: 'transparent' }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                              );
+                            }}
+                          />
+                          <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} background={{ fill: 'transparent' }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
 
-                  {/* Volume chart — X-axis shows date + time */}
-                  <ResponsiveContainer width="100%" height={120}>
-                    <ComposedChart data={candlestickData} margin={{ top: 0, right: 10, left: 10, bottom: 10 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis
-                        dataKey="time"
-                        stroke="#9CA3AF"
-                        style={{ fontSize: 11 }}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        stroke="#9CA3AF"
-                        style={{ fontSize: 12 }}
-                        tickLine={false}
-                        tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
-                      />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const d = payload[0].payload as any;
-                          return (
-                            <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
-                              <p className="text-gray-400 mb-1">{d.time}</p>
-                              <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Bar dataKey="volume">
-                        {candlestickData.map((entry: any, i: number) => (
-                          <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
-                        ))}
-                      </Bar>
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                  </>
+                      {/* Volume chart */}
+                      <ResponsiveContainer width="100%" height={120}>
+                        <ComposedChart data={candlestickData} margin={{ top: 0, right: 10, left: 10, bottom: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                          <XAxis
+                            dataKey="time"
+                            stroke="#9CA3AF"
+                            style={{ fontSize: 11 }}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            stroke="#9CA3AF"
+                            style={{ fontSize: 12 }}
+                            tickLine={false}
+                            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
+                          />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (!active || !payload?.length) return null;
+                              const d = payload[0].payload as any;
+                              return (
+                                <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
+                                  <p className="text-gray-400 mb-1">{d.time}</p>
+                                  <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Bar dataKey="volume">
+                            {candlestickData.map((entry: any, i: number) => (
+                              <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
+                            ))}
+                          </Bar>
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </>
                   )}
                 </div>
               </CardContent>
