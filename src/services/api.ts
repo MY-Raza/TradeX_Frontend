@@ -30,7 +30,7 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
 
 export interface ExchangeInfo  { id: string; label: string }
 export interface CoinInfo      { symbol: string; label: string }
-export interface OHLCVCandle   { time: string; open: number; high: number; low: number; close: number; volume: number }
+export interface OHLCVCandle   { time: string; date: string; open: number; high: number; low: number; close: number; volume: number }
 export interface OHLCVResponse {
   exchange: string; symbol: string; timeframe: string;
   candles: OHLCVCandle[]; total_rows: number;

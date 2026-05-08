@@ -212,18 +212,16 @@ export function DataTab() {
 
   const allCandles = ohlcvData?.candles ?? [];
 
-  // Client-side date filter — no extra API call needed
+  // Client-side date filter — uses the dedicated ISO `date` field from the backend
   const candlestickData = allCandles.filter((c: OHLCVCandle) => {
-    // c.time is a formatted label like "2024-01-01 14:00" — extract YYYY-MM-DD
-    const dateStr = c.time.slice(0, 10);
-    if (chartFromDate && dateStr < chartFromDate) return false;
-    if (chartToDate   && dateStr > chartToDate)   return false;
+    if (chartFromDate && c.date < chartFromDate) return false;
+    if (chartToDate   && c.date > chartToDate)   return false;
     return true;
   });
 
-  // Date bounds for the chart-filter inputs
-  const candleMinDate = allCandles.length ? allCandles[0].time.slice(0, 10)                : '';
-  const candleMaxDate = allCandles.length ? allCandles[allCandles.length - 1].time.slice(0, 10) : '';
+  // Date bounds for the chart-filter inputs — derived from the real ISO dates
+  const candleMinDate = allCandles.length ? allCandles[0].date                              : '';
+  const candleMaxDate = allCandles.length ? allCandles[allCandles.length - 1].date : '';
 
   const handleChartDateReset = () => { setChartFromDate(''); setChartToDate(''); };
 
