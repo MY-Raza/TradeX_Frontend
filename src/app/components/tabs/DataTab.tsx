@@ -158,10 +158,14 @@ export function DataTab() {
           setStartDate(lockedDate);
           setStartDateLocked(true);
           setLastDbDate(lockedDate);
-          // Auto-load chart using the DB's last date as fromDate so we
-          // immediately show real stored data without any default/mock candles.
+          // Auto-load chart from 1 day before the DB's last date so the
+          // initial view always shows a full day of candles (e.g. if today is
+          // May 8, we load from May 7 → gives yesterday + today candles).
+          const prevDay = new Date(lockedDate);
+          prevDay.setDate(prevDay.getDate() - 1);
+          const prevDayStr = prevDay.toISOString().slice(0, 10);
           setIsCheckingDb(false);
-          loadChart(exchange, coin, lockedDate, undefined);
+          loadChart(exchange, coin, prevDayStr, undefined);
         } else {
           setStartDateLocked(false);
           setLastDbDate(null);
