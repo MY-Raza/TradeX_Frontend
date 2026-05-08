@@ -58,7 +58,7 @@ const Candlestick = (props: any) => {
         y={bodyTop}
         width={candleW}
         height={bodyHeight}
-        fill={isGrowing ? 'transparent' : color}
+        fill={color}
         stroke={color}
         strokeWidth={1}
       />
