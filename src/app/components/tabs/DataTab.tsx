@@ -479,80 +479,113 @@ export function DataTab() {
                     </div>
                   ) : (
                     <>
-                      <ResponsiveContainer width="100%" height={400}>
-                        <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                          <XAxis dataKey="time" hide />
-                          <YAxis
-                            stroke="#9CA3AF"
-                            domain={yDomain}
-                            style={{ fontSize: 12 }}
-                            tickLine={false}
-                            tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
-                          />
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload?.length) return null;
-                              const d = payload[0].payload as any;
-                              const up = d.close > d.open;
-                              return (
-                                <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
-                                  <p className="text-gray-400 mb-2">{d.time}</p>
-                                  {(['open', 'high', 'low', 'close'] as const).map((k) => (
-                                    <div key={k} className="flex justify-between gap-4">
-                                      <span className="text-gray-400 capitalize">{k}:</span>
-                                      <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
-                                        ${d[k].toLocaleString()}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
-                                    <span className="text-gray-400">Volume:</span>
-                                    <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
-                                  </div>
-                                </div>
-                              );
-                            }}
-                          />
-                          <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} background={{ fill: 'transparent' }} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
+                      {/* Each candle gets a fixed pixel width so they never overlap.
+                          The outer div scrolls horizontally; the inner div sets the
+                          total canvas width based on candle count. */}
+                      {(() => {
+                        const CANDLE_PX = 10; // px per candle (body + gap)
+                        const Y_AXIS_W  = 70; // left margin reserved for the Y-axis
+                        const canvasW   = Math.max(candlestickData.length * CANDLE_PX + Y_AXIS_W, 600);
 
-                      {/* Volume chart */}
-                      <ResponsiveContainer width="100%" height={120}>
-                        <ComposedChart data={candlestickData} margin={{ top: 0, right: 10, left: 10, bottom: 10 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                          <XAxis
-                            dataKey="time"
-                            stroke="#9CA3AF"
-                            style={{ fontSize: 11 }}
-                            tickLine={false}
-                          />
-                          <YAxis
-                            stroke="#9CA3AF"
-                            style={{ fontSize: 12 }}
-                            tickLine={false}
-                            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
-                          />
-                          <Tooltip
-                            content={({ active, payload }) => {
-                              if (!active || !payload?.length) return null;
-                              const d = payload[0].payload as any;
-                              return (
-                                <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
-                                  <p className="text-gray-400 mb-1">{d.time}</p>
-                                  <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
-                                </div>
-                              );
-                            }}
-                          />
-                          <Bar dataKey="volume">
-                            {candlestickData.map((entry: any, i: number) => (
-                              <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
-                            ))}
-                          </Bar>
-                        </ComposedChart>
-                      </ResponsiveContainer>
+                        return (
+                          <div
+                            style={{ overflowX: 'auto', overflowY: 'hidden' }}
+                            className="w-full"
+                          >
+                            {/* Candlestick chart */}
+                            <div style={{ width: canvasW, minWidth: '100%' }}>
+                              <ComposedChart
+                                width={canvasW}
+                                height={400}
+                                data={candlestickData}
+                                margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis dataKey="time" hide />
+                                <YAxis
+                                  stroke="#9CA3AF"
+                                  domain={yDomain}
+                                  style={{ fontSize: 12 }}
+                                  tickLine={false}
+                                  tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
+                                />
+                                <Tooltip
+                                  content={({ active, payload }) => {
+                                    if (!active || !payload?.length) return null;
+                                    const d = payload[0].payload as any;
+                                    const up = d.close > d.open;
+                                    return (
+                                      <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
+                                        <p className="text-gray-400 mb-2">{d.time}</p>
+                                        {(['open', 'high', 'low', 'close'] as const).map((k) => (
+                                          <div key={k} className="flex justify-between gap-4">
+                                            <span className="text-gray-400 capitalize">{k}:</span>
+                                            <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+                                              ${d[k].toLocaleString()}
+                                            </span>
+                                          </div>
+                                        ))}
+                                        <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
+                                          <span className="text-gray-400">Volume:</span>
+                                          <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  }}
+                                />
+                                <Bar
+                                  dataKey="close"
+                                  shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />}
+                                  isAnimationActive={false}
+                                  background={{ fill: 'transparent' }}
+                                />
+                              </ComposedChart>
+                            </div>
+
+                            {/* Volume chart — same canvas width so they scroll in sync */}
+                            <div style={{ width: canvasW, minWidth: '100%' }}>
+                              <ComposedChart
+                                width={canvasW}
+                                height={120}
+                                data={candlestickData}
+                                margin={{ top: 0, right: 10, left: 10, bottom: 10 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <XAxis
+                                  dataKey="time"
+                                  stroke="#9CA3AF"
+                                  style={{ fontSize: 11 }}
+                                  tickLine={false}
+                                  interval={Math.ceil(candlestickData.length / 12)}
+                                />
+                                <YAxis
+                                  stroke="#9CA3AF"
+                                  style={{ fontSize: 12 }}
+                                  tickLine={false}
+                                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
+                                />
+                                <Tooltip
+                                  content={({ active, payload }) => {
+                                    if (!active || !payload?.length) return null;
+                                    const d = payload[0].payload as any;
+                                    return (
+                                      <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
+                                        <p className="text-gray-400 mb-1">{d.time}</p>
+                                        <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
+                                      </div>
+                                    );
+                                  }}
+                                />
+                                <Bar dataKey="volume">
+                                  {candlestickData.map((entry: any, i: number) => (
+                                    <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
+                                  ))}
+                                </Bar>
+                              </ComposedChart>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>
