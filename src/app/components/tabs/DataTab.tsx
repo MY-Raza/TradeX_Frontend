@@ -96,6 +96,10 @@ export function DataTab() {
   // ── Chart data ────────────────────────────────────────────────────────────
   const [ohlcvData, setOhlcvData] = useState<OHLCVResponse | null>(null);
 
+  // ── Chart date filter (client-side slice of loaded candles) ───────────────
+  const [chartFromDate, setChartFromDate] = useState('');
+  const [chartToDate, setChartToDate]     = useState('');
+
   // ── Load exchanges on mount ───────────────────────────────────────────────
   useEffect(() => {
     dataApi.getExchanges()
@@ -157,6 +161,8 @@ export function DataTab() {
       const data = await dataApi.getOHLCV(exch, sym, FIXED_TIMEFRAME);
       setOhlcvData(data);
       setShowChart(true);
+      setChartFromDate('');
+      setChartToDate('');
     } catch (e: any) {
       setOhlcvData(null);
       setShowChart(false);
@@ -204,7 +210,22 @@ export function DataTab() {
     }
   };
 
-  const candlestickData = ohlcvData?.candles ?? [];
+  const allCandles = ohlcvData?.candles ?? [];
+
+  // Client-side date filter — no extra API call needed
+  const candlestickData = allCandles.filter((c: OHLCVCandle) => {
+    // c.time is a formatted label like "2024-01-01 14:00" — extract YYYY-MM-DD
+    const dateStr = c.time.slice(0, 10);
+    if (chartFromDate && dateStr < chartFromDate) return false;
+    if (chartToDate   && dateStr > chartToDate)   return false;
+    return true;
+  });
+
+  // Date bounds for the chart-filter inputs
+  const candleMinDate = allCandles.length ? allCandles[0].time.slice(0, 10)                : '';
+  const candleMaxDate = allCandles.length ? allCandles[allCandles.length - 1].time.slice(0, 10) : '';
+
+  const handleChartDateReset = () => { setChartFromDate(''); setChartToDate(''); };
 
   // Compute explicit numeric domain from all candle prices so we can pass it
   // to both YAxis and the Candlestick shape reliably
@@ -395,27 +416,97 @@ export function DataTab() {
                   <span className="ml-2 text-sm font-normal text-gray-400 dark:text-gray-500">1m</span>
                   {isLoadingChart && <Loader2 className="inline w-4 h-4 ml-2 animate-spin text-blue-500" />}
                 </CardTitle>
+
+                {/* ── Chart date range filter ─────────────────────────── */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CalendarIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="flex items-center gap-1">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">From</label>
+                    <input
+                      type="date"
+                      value={chartFromDate}
+                      min={candleMinDate}
+                      max={chartToDate || candleMaxDate}
+                      onChange={e => setChartFromDate(e.target.value)}
+                      className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
+                        text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">To</label>
+                    <input
+                      type="date"
+                      value={chartToDate}
+                      min={chartFromDate || candleMinDate}
+                      max={candleMaxDate}
+                      onChange={e => setChartToDate(e.target.value)}
+                      className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
+                        text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                    />
+                  </div>
+                  {(chartFromDate || chartToDate) && (
+                    <button
+                      onClick={handleChartDateReset}
+                      className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
+                        text-xs text-gray-500 dark:text-gray-400 hover:text-red-400 hover:border-red-400
+                        bg-white dark:bg-[#0B0F19] transition-colors"
+                      title="Reset filter"
+                    >
+                      ✕ Reset
+                    </button>
+                  )}
+                  {(chartFromDate || chartToDate) && (
+                    <span className="text-xs text-blue-400 whitespace-nowrap">
+                      {candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
               </CardHeader>
 
               <CardContent>
-                {/* Summary stats */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                  {[
-                    { label: 'Open',   value: `$${ohlcvData.open.toLocaleString()}`,    color: 'text-gray-900 dark:text-white' },
-                    { label: 'High',   value: `$${ohlcvData.high.toLocaleString()}`,    color: 'text-green-500' },
-                    { label: 'Low',    value: `$${ohlcvData.low.toLocaleString()}`,     color: 'text-red-500' },
-                    { label: 'Close',  value: `$${ohlcvData.close.toLocaleString()}`,   color: 'text-gray-900 dark:text-white' },
-                    { label: 'Volume', value: ohlcvData.total_volume.toLocaleString(), color: 'text-blue-500' },
-                  ].map((s) => (
-                    <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
-                      <p className={`text-lg font-bold mt-1 ${s.color}`}>{s.value}</p>
+                {/* Summary stats — update to reflect filtered range when a filter is active */}
+                {(() => {
+                  const src = candlestickData.length ? candlestickData : (ohlcvData?.candles ?? []);
+                  const isFiltered = (chartFromDate || chartToDate) && candlestickData.length > 0;
+                  const statsOpen   = isFiltered ? src[0].open                              : ohlcvData.open;
+                  const statsHigh   = isFiltered ? Math.max(...src.map((c: OHLCVCandle) => c.high)) : ohlcvData.high;
+                  const statsLow    = isFiltered ? Math.min(...src.map((c: OHLCVCandle) => c.low))  : ohlcvData.low;
+                  const statsClose  = isFiltered ? src[src.length - 1].close               : ohlcvData.close;
+                  const statsVol    = isFiltered ? src.reduce((a: number, c: OHLCVCandle) => a + c.volume, 0) : ohlcvData.total_volume;
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                      {[
+                        { label: 'Open',   value: `$${statsOpen.toLocaleString()}`,  color: 'text-gray-900 dark:text-white' },
+                        { label: 'High',   value: `$${statsHigh.toLocaleString()}`,  color: 'text-green-500' },
+                        { label: 'Low',    value: `$${statsLow.toLocaleString()}`,   color: 'text-red-500' },
+                        { label: 'Close',  value: `$${statsClose.toLocaleString()}`, color: 'text-gray-900 dark:text-white' },
+                        { label: 'Volume', value: statsVol.toLocaleString(),         color: 'text-blue-500' },
+                      ].map((s) => (
+                        <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
+                          <p className={`text-lg font-bold mt-1 ${s.color}`}>{s.value}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
 
                 <div className="space-y-4">
-                  {/* Candlestick chart — X-axis hidden, date shown in volume chart below */}
+                  {candlestickData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-48 text-gray-400 dark:text-gray-500">
+                      <CalendarIcon className="w-10 h-10 mb-3 opacity-40" />
+                      <p className="text-sm font-medium">No candles in selected range</p>
+                      <button
+                        onClick={handleChartDateReset}
+                        className="mt-3 text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                      >
+                        Reset date filter
+                      </button>
+                    </div>
+                  ) : (
+                  <>
                   <ResponsiveContainer width="100%" height={400}>
                     <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -490,6 +581,8 @@ export function DataTab() {
                       </Bar>
                     </ComposedChart>
                   </ResponsiveContainer>
+                  </>
+                  )}
                 </div>
               </CardContent>
             </Card>
