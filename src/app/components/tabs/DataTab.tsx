@@ -25,27 +25,55 @@ const Candlestick = (props: any) => {
   const chartTop    = background.y as number;
   const chartHeight = background.height as number;
 
-  const toPixelY = (price: number) =>
+  // Use full floating-point precision — no premature rounding (fix #1)
+  const toPixelY = (price: number): number =>
     chartTop + chartHeight - ((price - domainMin) / (domainMax - domainMin)) * chartHeight;
 
-  const isGrowing  = close >= open;
-  const color      = isGrowing ? '#0ECB81' : '#F6465D';
-  const centerX    = x + width / 2;
-  const candleW    = Math.max(width * 0.55, 1);
+  const isGrowing = close >= open;
+  const color     = isGrowing ? '#0ECB81' : '#F6465D';
 
+  // Align center X to whole pixel to avoid blurry vertical lines (fix #6)
+  const centerX = Math.round(x + width / 2);
+  const candleW = Math.max(width * 0.55, 1);
+
+  // Raw floating-point Y coordinates for all four price levels (fix #1)
   const highPx  = toPixelY(high);
   const lowPx   = toPixelY(low);
   const openPx  = toPixelY(open);
   const closePx = toPixelY(close);
 
+  // Body bounds derived from open/close (fix #2)
   const bodyTop    = Math.min(openPx, closePx);
   const bodyBottom = Math.max(openPx, closePx);
   const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
 
+  // Separate top and bottom wick from body edges (fix #2)
+  // Enforce minimum 1 px wick so tiny wicks are always visible (fix #3)
+  const topWickTop    = highPx;
+  const topWickBottom = Math.min(bodyTop, highPx + 1);   // at least 1 px below highY
+
+  const botWickTop    = Math.max(bodyBottom, lowPx - 1); // at least 1 px above lowY
+  const botWickBottom = lowPx;
+
   return (
     <g>
-      <line x1={centerX} y1={highPx}    x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={0.8} />
-      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowPx}     stroke={color} strokeWidth={0.8} />
+      {/* Top wick: from high down to body top (fix #2, #4) */}
+      <line
+        x1={centerX} y1={topWickTop}
+        x2={centerX} y2={topWickBottom}
+        stroke={color}
+        strokeWidth={0.8}
+        shapeRendering="crispEdges"
+      />
+      {/* Bottom wick: from body bottom down to low (fix #2, #4) */}
+      <line
+        x1={centerX} y1={botWickTop}
+        x2={centerX} y2={botWickBottom}
+        stroke={color}
+        strokeWidth={0.8}
+        shapeRendering="crispEdges"
+      />
+      {/* Candle body */}
       <rect
         x={centerX - candleW / 2}
         y={bodyTop}
@@ -53,7 +81,8 @@ const Candlestick = (props: any) => {
         height={bodyHeight}
         fill={color}
         stroke={color}
-        strokeWidth={1}
+        strokeWidth={0.5}
+        shapeRendering="crispEdges"
       />
     </g>
   );
@@ -233,16 +262,17 @@ export function DataTab() {
   const yDomain: [number, number] = (() => {
     if (!candlestickData.length) return [0, 1];
 
-    const lows = candlestickData.map((c: any) => c.low);
-    const highs = candlestickData.map((c: any) => c.high);
+    const allLows  = candlestickData.map((c: any) => c.low);
+    const allHighs = candlestickData.map((c: any) => c.high);
+    const minPrice = Math.min(...allLows);
+    const maxPrice = Math.max(...allHighs);
+    const range    = maxPrice - minPrice;
 
-    const minPrice = Math.min(...lows);
-    const maxPrice = Math.max(...highs);
-
-    const range = maxPrice - minPrice;
-
-    // Binance-like tight scaling
-    const pad = range * 0.05;
+    // Use a fixed minimum range so that when price barely moves (e.g. $28
+    // spread on a quiet 1m window) the candles still get visible height.
+    // Then pad 15% above and below so wicks never touch the chart edges.
+    const effectiveRange = Math.max(range, minPrice * 0.001); // at least 0.1% of price
+    const pad = effectiveRange * 0.15;
 
     return [minPrice - pad, maxPrice + pad];
   })();
@@ -500,7 +530,7 @@ export function DataTab() {
                           The outer div scrolls horizontally; the inner div sets the
                           total canvas width based on candle count. */}
                       {(() => {
-                        const CANDLE_PX = 10; // px per candle (body + gap)
+                        const CANDLE_PX = 32; // px per candle (body + gap)
                         const Y_AXIS_W  = 70; // left margin reserved for the Y-axis
                         const canvasW   = Math.max(candlestickData.length * CANDLE_PX + Y_AXIS_W, 600);
 
@@ -517,11 +547,7 @@ export function DataTab() {
                                 data={candlestickData}
                                 margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                               >
-                                <CartesianGrid
-                                  stroke="#1f2937"
-                                  strokeDasharray="0"
-                                  opacity={0.25}
-                                />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                                 <XAxis dataKey="time" hide />
                                 <YAxis
                                   stroke="#9CA3AF"
@@ -571,11 +597,7 @@ export function DataTab() {
                                 data={candlestickData}
                                 margin={{ top: 0, right: 10, left: 10, bottom: 10 }}
                               >
-                                <CartesianGrid
-                                  stroke="#1f2937"
-                                  strokeDasharray="0"
-                                  opacity={0.25}
-                                />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
                                 <XAxis
                                   dataKey="time"
                                   stroke="#9CA3AF"
