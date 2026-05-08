@@ -31,7 +31,7 @@ const Candlestick = (props: any) => {
   const isGrowing  = close >= open;
   const color      = isGrowing ? '#0ECB81' : '#F6465D';
   const centerX    = x + width / 2;
-  const candleW    = Math.max(width * 0.8, 2);
+  const candleW    = Math.max(width * 0.55, 1);
 
   const highPx  = toPixelY(high);
   const lowPx   = toPixelY(low);
@@ -44,8 +44,8 @@ const Candlestick = (props: any) => {
 
   return (
     <g>
-      <line x1={centerX} y1={highPx}    x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={1} />
-      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowPx}     stroke={color} strokeWidth={1} />
+      <line x1={centerX} y1={highPx}    x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={0.8} />
+      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowPx}     stroke={color} strokeWidth={0.8} />
       <rect
         x={centerX - candleW / 2}
         y={bodyTop}
@@ -233,17 +233,16 @@ export function DataTab() {
   const yDomain: [number, number] = (() => {
     if (!candlestickData.length) return [0, 1];
 
-    const allLows  = candlestickData.map((c: any) => c.low);
-    const allHighs = candlestickData.map((c: any) => c.high);
-    const minPrice = Math.min(...allLows);
-    const maxPrice = Math.max(...allHighs);
-    const range    = maxPrice - minPrice;
+    const lows = candlestickData.map((c: any) => c.low);
+    const highs = candlestickData.map((c: any) => c.high);
 
-    // Use a fixed minimum range so that when price barely moves (e.g. $28
-    // spread on a quiet 1m window) the candles still get visible height.
-    // Then pad 15% above and below so wicks never touch the chart edges.
-    const effectiveRange = Math.max(range, minPrice * 0.001); // at least 0.1% of price
-    const pad = effectiveRange * 0.15;
+    const minPrice = Math.min(...lows);
+    const maxPrice = Math.max(...highs);
+
+    const range = maxPrice - minPrice;
+
+    // Binance-like tight scaling
+    const pad = range * 0.05;
 
     return [minPrice - pad, maxPrice + pad];
   })();
@@ -501,7 +500,7 @@ export function DataTab() {
                           The outer div scrolls horizontally; the inner div sets the
                           total canvas width based on candle count. */}
                       {(() => {
-                        const CANDLE_PX = 32; // px per candle (body + gap)
+                        const CANDLE_PX = 10; // px per candle (body + gap)
                         const Y_AXIS_W  = 70; // left margin reserved for the Y-axis
                         const canvasW   = Math.max(candlestickData.length * CANDLE_PX + Y_AXIS_W, 600);
 
@@ -518,7 +517,11 @@ export function DataTab() {
                                 data={candlestickData}
                                 margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <CartesianGrid
+                                  stroke="#1f2937"
+                                  strokeDasharray="0"
+                                  opacity={0.25}
+                                />
                                 <XAxis dataKey="time" hide />
                                 <YAxis
                                   stroke="#9CA3AF"
@@ -568,7 +571,11 @@ export function DataTab() {
                                 data={candlestickData}
                                 margin={{ top: 0, right: 10, left: 10, bottom: 10 }}
                               >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
+                                <CartesianGrid
+                                  stroke="#1f2937"
+                                  strokeDasharray="0"
+                                  opacity={0.25}
+                                />
                                 <XAxis
                                   dataKey="time"
                                   stroke="#9CA3AF"
