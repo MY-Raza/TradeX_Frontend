@@ -31,7 +31,7 @@ const Candlestick = (props: any) => {
   const isGrowing  = close >= open;
   const color      = isGrowing ? '#0ECB81' : '#F6465D';
   const centerX    = x + width / 2;
-  const candleW    = Math.max(width * 0.65, 2);
+  const candleW    = Math.max(width * 0.8, 2);
 
   const highPx  = toPixelY(high);
   const lowPx   = toPixelY(low);
@@ -483,7 +483,7 @@ export function DataTab() {
                           The outer div scrolls horizontally; the inner div sets the
                           total canvas width based on candle count. */}
                       {(() => {
-                        const CANDLE_PX = 10; // px per candle (body + gap)
+                        const CANDLE_PX = 32; // px per candle (body + gap)
                         const Y_AXIS_W  = 70; // left margin reserved for the Y-axis
                         const canvasW   = Math.max(candlestickData.length * CANDLE_PX + Y_AXIS_W, 600);
 
