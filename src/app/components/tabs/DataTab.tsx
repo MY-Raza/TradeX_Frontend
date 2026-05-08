@@ -423,8 +423,7 @@ export function DataTab() {
                     <input
                       type="date"
                       value={chartFromDate}
-                      min={candleMinDate}
-                      max={chartToDate || candleMaxDate}
+                      max={chartToDate || undefined}
                       onChange={e => setChartFromDate(e.target.value)}
                       className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
                         text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
@@ -436,8 +435,7 @@ export function DataTab() {
                     <input
                       type="date"
                       value={chartToDate}
-                      min={chartFromDate || candleMinDate}
-                      max={candleMaxDate}
+                      min={chartFromDate || undefined}
                       onChange={e => setChartToDate(e.target.value)}
                       className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
                         text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
