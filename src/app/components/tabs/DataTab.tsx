@@ -226,25 +226,17 @@ export function DataTab() {
   const yDomain: [number, number] = (() => {
     if (!candlestickData.length) return [0, 1];
 
-    // When a fromDate filter loads thousands of candles spanning a large price
-    // journey (e.g. $78k→$82k over several days), using the global min/max
-    // squishes every 1-min candle into a tiny sliver.
-    //
-    // Solution: compute the domain from the LAST 300 candles (≈5 hrs of 1m
-    // data) — the most recent local window. The Y-axis always zooms to current
-    // price action regardless of total candle count, exactly like Binance.
-    const WINDOW = 300;
-    const slice  = candlestickData.slice(-WINDOW);
-
-    const sliceLows  = slice.map((c: any) => c.low);
-    const sliceHighs = slice.map((c: any) => c.high);
-
-    const minPrice = Math.min(...sliceLows);
-    const maxPrice = Math.max(...sliceHighs);
+    const allLows  = candlestickData.map((c: any) => c.low);
+    const allHighs = candlestickData.map((c: any) => c.high);
+    const minPrice = Math.min(...allLows);
+    const maxPrice = Math.max(...allHighs);
     const range    = maxPrice - minPrice;
 
-    // 10% pad gives wicks comfortable breathing room within the local window
-    const pad = range * 0.10;
+    // Use a fixed minimum range so that when price barely moves (e.g. $28
+    // spread on a quiet 1m window) the candles still get visible height.
+    // Then pad 15% above and below so wicks never touch the chart edges.
+    const effectiveRange = Math.max(range, minPrice * 0.001); // at least 0.1% of price
+    const pad = effectiveRange * 0.15;
 
     return [minPrice - pad, maxPrice + pad];
   })();
