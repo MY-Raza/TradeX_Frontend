@@ -3,60 +3,71 @@ import { Database, Loader2, CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Customized } from 'recharts';
+import { ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { dataApi, ExchangeInfo, CoinInfo, OHLCVCandle, OHLCVResponse } from '../../../services/api';
 
 // Fixed timeframe — 1-minute candles only
 const FIXED_TIMEFRAME = '1m';
 
-// Candlestick rendered as a Recharts <Customized> layer — gets full chart context
-const CandlestickLayer = (props: any) => {
-  const { xAxisMap, yAxisMap, data, xAxis } = props;
-  if (!xAxisMap || !yAxisMap || !data) return null;
+// Candlestick shape used with Recharts Bar.
+// Recharts passes offset (chart area bounds) and yAxis to every Bar shape.
+// We manually build a linear price→pixel Y mapper.
+const Candlestick = (props: any) => {
+  const { x, width, payload, offset, yAxis, explicitDomain } = props;
+  if (!payload || !offset) return null;
 
-  const xScale = xAxisMap[0]?.scale;
-  const yScale = yAxisMap[0]?.scale;
-  if (!xScale || !yScale) return null;
+  const { open, close, high, low } = payload;
+  if (open == null || close == null || high == null || low == null) return null;
 
-  const bandwidth = xScale.bandwidth ? xScale.bandwidth() : (xScale.range()[1] - xScale.range()[0]) / data.length;
+  // Resolve domain — prefer explicit prop, then Recharts yAxis, then niceTicks
+  let domainMin: number | undefined;
+  let domainMax: number | undefined;
+
+  if (Array.isArray(explicitDomain) && typeof explicitDomain[0] === 'number') {
+    [domainMin, domainMax] = explicitDomain;
+  } else {
+    const dom = yAxis?.domain;
+    if (Array.isArray(dom) && typeof dom[0] === 'number' && typeof dom[1] === 'number') {
+      [domainMin, domainMax] = dom;
+    } else if (yAxis?.niceTicks?.length) {
+      domainMin = yAxis.niceTicks[0];
+      domainMax = yAxis.niceTicks[yAxis.niceTicks.length - 1];
+    }
+  }
+
+  if (domainMin == null || domainMax == null || domainMax === domainMin) return null;
+
+  const toPixelY = (price: number) =>
+    offset.top + offset.height - ((price - domainMin!) / (domainMax! - domainMin!)) * offset.height;
+
+  const isGrowing = close >= open;
+  const color = isGrowing ? '#0ECB81' : '#F6465D';
+
+  const highY  = toPixelY(high);
+  const lowY   = toPixelY(low);
+  const openY  = toPixelY(open);
+  const closeY = toPixelY(close);
+
+  const bodyTop    = Math.min(openY, closeY);
+  const bodyBottom = Math.max(openY, closeY);
+  const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
+  const candleW    = Math.max(width * 0.65, 2);
+  const centerX    = x + width / 2;
 
   return (
     <g>
-      {data.map((d: any, i: number) => {
-        const { open, close, high, low, time } = d;
-        if (open == null || close == null) return null;
-
-        const isGrowing = close >= open;
-        const color = isGrowing ? '#0ECB81' : '#F6465D';
-
-        const cx = xScale(time ?? i) + (xScale.bandwidth ? bandwidth / 2 : 0);
-        const highY  = yScale(high);
-        const lowY   = yScale(low);
-        const openY  = yScale(open);
-        const closeY = yScale(close);
-
-        const bodyTop    = Math.min(openY, closeY);
-        const bodyBottom = Math.max(openY, closeY);
-        const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
-        const candleW    = Math.max(bandwidth * 0.65, 2);
-
-        return (
-          <g key={i}>
-            <line x1={cx} y1={highY}   x2={cx} y2={bodyTop}    stroke={color} strokeWidth={1} />
-            <line x1={cx} y1={bodyBottom} x2={cx} y2={lowY}    stroke={color} strokeWidth={1} />
-            <rect
-              x={cx - candleW / 2}
-              y={bodyTop}
-              width={candleW}
-              height={bodyHeight}
-              fill={isGrowing ? 'transparent' : color}
-              stroke={color}
-              strokeWidth={1}
-            />
-          </g>
-        );
-      })}
+      <line x1={centerX} y1={highY}      x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={1} />
+      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowY}       stroke={color} strokeWidth={1} />
+      <rect
+        x={centerX - candleW / 2}
+        y={bodyTop}
+        width={candleW}
+        height={bodyHeight}
+        fill={isGrowing ? 'transparent' : color}
+        stroke={color}
+        strokeWidth={1}
+      />
     </g>
   );
 };
@@ -200,6 +211,15 @@ export function DataTab() {
   };
 
   const candlestickData = ohlcvData?.candles ?? [];
+
+  // Compute explicit numeric domain from all candle prices so we can pass it
+  // to both YAxis and the Candlestick shape reliably
+  const yDomain: [number, number] = candlestickData.length
+    ? [
+        Math.min(...candlestickData.map((c: any) => c.low))  - 50,
+        Math.max(...candlestickData.map((c: any) => c.high)) + 50,
+      ]
+    : [0, 1];
 
   return (
     <motion.div
@@ -407,7 +427,7 @@ export function DataTab() {
                       <XAxis dataKey="time" stroke="#9CA3AF" style={{ fontSize: 12 }} tickLine={false} />
                       <YAxis
                         stroke="#9CA3AF"
-                        domain={['dataMin - 100', 'dataMax + 100']}
+                        domain={yDomain}
                         style={{ fontSize: 12 }}
                         tickLine={false}
                         tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
@@ -436,7 +456,7 @@ export function DataTab() {
                           );
                         }}
                       />
-                      <Customized component={CandlestickLayer} />
+                      <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
 
