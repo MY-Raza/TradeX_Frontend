@@ -10,55 +10,49 @@ import { dataApi, ExchangeInfo, CoinInfo, OHLCVCandle, OHLCVResponse } from '../
 // Fixed timeframe — 1-minute candles only
 const FIXED_TIMEFRAME = '1m';
 
-// Candlestick shape used with Recharts Bar.
-// Recharts passes offset (chart area bounds) and yAxis to every Bar shape.
-// We manually build a linear price→pixel Y mapper.
+// Candlestick shape for Recharts <Bar>.
+// Recharts guarantees: x, y, width, height, background, value (=close), payload.
+// background.y = chart area top pixel, background.height = chart area pixel height.
+// We use those + explicitDomain to map any price to a pixel Y.
 const Candlestick = (props: any) => {
-  const { x, width, payload, offset, yAxis, explicitDomain } = props;
-  if (!payload || !offset) return null;
+  const { x, y, width, height, background, payload, value, explicitDomain } = props;
+
+  if (!payload || !background || !explicitDomain) return null;
 
   const { open, close, high, low } = payload;
   if (open == null || close == null || high == null || low == null) return null;
 
-  // Resolve domain — prefer explicit prop, then Recharts yAxis, then niceTicks
-  let domainMin: number | undefined;
-  let domainMax: number | undefined;
+  const [domainMin, domainMax] = explicitDomain as [number, number];
+  if (domainMax === domainMin) return null;
 
-  if (Array.isArray(explicitDomain) && typeof explicitDomain[0] === 'number') {
-    [domainMin, domainMax] = explicitDomain;
-  } else {
-    const dom = yAxis?.domain;
-    if (Array.isArray(dom) && typeof dom[0] === 'number' && typeof dom[1] === 'number') {
-      [domainMin, domainMax] = dom;
-    } else if (yAxis?.niceTicks?.length) {
-      domainMin = yAxis.niceTicks[0];
-      domainMax = yAxis.niceTicks[yAxis.niceTicks.length - 1];
-    }
-  }
-
-  if (domainMin == null || domainMax == null || domainMax === domainMin) return null;
+  // background.y = top of chart area in SVG coords; background.height = total pixel height
+  const chartTop    = background.y as number;
+  const chartHeight = background.height as number;
 
   const toPixelY = (price: number) =>
-    offset.top + offset.height - ((price - domainMin!) / (domainMax! - domainMin!)) * offset.height;
+    chartTop + chartHeight - ((price - domainMin) / (domainMax - domainMin)) * chartHeight;
 
-  const isGrowing = close >= open;
-  const color = isGrowing ? '#0ECB81' : '#F6465D';
-
-  const highY  = toPixelY(high);
-  const lowY   = toPixelY(low);
-  const openY  = toPixelY(open);
-  const closeY = toPixelY(close);
-
-  const bodyTop    = Math.min(openY, closeY);
-  const bodyBottom = Math.max(openY, closeY);
-  const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
-  const candleW    = Math.max(width * 0.65, 2);
+  const isGrowing  = close >= open;
+  const color      = isGrowing ? '#0ECB81' : '#F6465D';
   const centerX    = x + width / 2;
+  const candleW    = Math.max(width * 0.65, 2);
+
+  const highPx  = toPixelY(high);
+  const lowPx   = toPixelY(low);
+  const openPx  = toPixelY(open);
+  const closePx = toPixelY(close);
+
+  const bodyTop    = Math.min(openPx, closePx);
+  const bodyBottom = Math.max(openPx, closePx);
+  const bodyHeight = Math.max(bodyBottom - bodyTop, 1);
 
   return (
     <g>
-      <line x1={centerX} y1={highY}      x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={1} />
-      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowY}       stroke={color} strokeWidth={1} />
+      {/* Upper wick */}
+      <line x1={centerX} y1={highPx}    x2={centerX} y2={bodyTop}    stroke={color} strokeWidth={1} />
+      {/* Lower wick */}
+      <line x1={centerX} y1={bodyBottom} x2={centerX} y2={lowPx}     stroke={color} strokeWidth={1} />
+      {/* Body: hollow = bullish, filled = bearish */}
       <rect
         x={centerX - candleW / 2}
         y={bodyTop}
@@ -456,7 +450,7 @@ export function DataTab() {
                           );
                         }}
                       />
-                      <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} />
+                      <Bar dataKey="close" shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />} isAnimationActive={false} background={{ fill: 'transparent' }} />
                     </ComposedChart>
                   </ResponsiveContainer>
 
