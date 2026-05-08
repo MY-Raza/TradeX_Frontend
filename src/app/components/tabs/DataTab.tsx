@@ -230,8 +230,8 @@ export function DataTab() {
     const priceMin = Math.min(...allLows);
     const priceMax = Math.max(...allHighs);
     const range    = priceMax - priceMin || priceMin * 0.01;
-    // 5% padding above and below — gives medium-height candles for 1m timeframe
-    const pad = range * 0.05;
+    // 15% padding above and below — matches the breathing room Binance uses
+    const pad = range * 0.15;
     return [priceMin - pad, priceMax + pad];
   })();
 
