@@ -223,12 +223,17 @@ export function DataTab() {
   // All candles come pre-filtered from the API — no client-side slicing needed
   const candlestickData = ohlcvData?.candles ?? [];
 
-  const yDomain: [number, number] = candlestickData.length
-    ? [
-        Math.min(...candlestickData.map((c: any) => c.low))  - 50,
-        Math.max(...candlestickData.map((c: any) => c.high)) + 50,
-      ]
-    : [0, 1];
+  const yDomain: [number, number] = (() => {
+    if (!candlestickData.length) return [0, 1];
+    const allLows  = candlestickData.map((c: any) => c.low);
+    const allHighs = candlestickData.map((c: any) => c.high);
+    const minPrice = Math.min(...allLows);
+    const maxPrice = Math.max(...allHighs);
+    const range    = maxPrice - minPrice;
+    // Pad by 5 % of the visible price range — same tight zoom Binance uses
+    const pad = range * 0.05;
+    return [minPrice - pad, maxPrice + pad];
+  })();
 
   return (
     <motion.div
