@@ -404,7 +404,7 @@ export function DataTab() {
                     { label: 'High',   value: `$${ohlcvData.high.toLocaleString()}`,    color: 'text-green-500' },
                     { label: 'Low',    value: `$${ohlcvData.low.toLocaleString()}`,     color: 'text-red-500' },
                     { label: 'Close',  value: `$${ohlcvData.close.toLocaleString()}`,   color: 'text-gray-900 dark:text-white' },
-                    { label: 'Volume', value: `${(ohlcvData.total_volume / 1_000_000).toFixed(2)}M`, color: 'text-blue-500' },
+                    { label: 'Volume', value: ohlcvData.total_volume.toLocaleString(), color: 'text-blue-500' },
                   ].map((s) => (
                     <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
                       <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
@@ -418,7 +418,7 @@ export function DataTab() {
                   <ResponsiveContainer width="100%" height={400}>
                     <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="time" stroke="#9CA3AF" style={{ fontSize: 12 }} tickLine={false} />
+                      <XAxis dataKey="time" hide />
                       <YAxis
                         stroke="#9CA3AF"
                         domain={yDomain}
@@ -444,7 +444,7 @@ export function DataTab() {
                               ))}
                               <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
                                 <span className="text-gray-400">Volume:</span>
-                                <span className="text-cyan-400 font-medium">{(d.volume / 1_000_000).toFixed(2)}M</span>
+                                <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
                               </div>
                             </div>
                           );
@@ -458,12 +458,34 @@ export function DataTab() {
                   <ResponsiveContainer width="100%" height={120}>
                     <ComposedChart data={candlestickData} margin={{ top: 0, right: 10, left: 10, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
-                      <XAxis dataKey="time" stroke="#9CA3AF" style={{ fontSize: 12 }} tickLine={false} />
+                      <XAxis
+                        dataKey="time"
+                        stroke="#9CA3AF"
+                        style={{ fontSize: 11 }}
+                        tickLine={false}
+                        tickFormatter={(val) => {
+                          // val is expected to be a string like "2024-01-15 22:03"
+                          // Show date + time: "Jan 15 22:03"
+                          if (!val) return '';
+                          const parts = val.split(' ');
+                          if (parts.length === 2) {
+                            const datePart = parts[0]; // "2024-01-15"
+                            const timePart = parts[1]; // "22:03"
+                            const d = new Date(datePart);
+                            if (!isNaN(d.getTime())) {
+                              const month = d.toLocaleString('en', { month: 'short' });
+                              const day = d.getDate();
+                              return `${month} ${day} ${timePart}`;
+                            }
+                          }
+                          return val;
+                        }}
+                      />
                       <YAxis
                         stroke="#9CA3AF"
                         style={{ fontSize: 12 }}
                         tickLine={false}
-                        tickFormatter={(v) => `${(v / 1_000_000).toFixed(1)}M`}
+                        tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
                       />
                       <Tooltip
                         content={({ active, payload }) => {
@@ -471,7 +493,8 @@ export function DataTab() {
                           const d = payload[0].payload as OHLCVCandle;
                           return (
                             <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
-                              <p className="text-gray-400">Volume: {(d.volume / 1_000_000).toFixed(2)}M</p>
+                              <p className="text-gray-400 mb-1">{d.time}</p>
+                              <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
                             </div>
                           );
                         }}
