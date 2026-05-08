@@ -225,14 +225,23 @@ export function DataTab() {
 
   const yDomain: [number, number] = (() => {
     if (!candlestickData.length) return [0, 1];
-    const allLows  = candlestickData.map((c: any) => c.low);
-    const allHighs = candlestickData.map((c: any) => c.high);
-    const minPrice = Math.min(...allLows);
-    const maxPrice = Math.max(...allHighs);
-    const range    = maxPrice - minPrice;
-    // Pad by 2 % of the visible price range — same tight zoom Binance uses
-    const pad = range * 0.02;
-    return [minPrice - pad, maxPrice + pad];
+
+    // Sort lows and highs to find percentile-based range.
+    // This mirrors what Binance does — zoom to where the bulk of price action
+    // is, ignoring extreme outlier wicks that would squish everything else.
+    const lows  = [...candlestickData.map((c: any) => c.low)].sort((a, b) => a - b);
+    const highs = [...candlestickData.map((c: any) => c.high)].sort((a, b) => a - b);
+    const n = lows.length;
+
+    // 2nd–98th percentile cuts outlier spikes while keeping real extremes
+    const p2Low   = lows[Math.max(0, Math.floor(n * 0.02))];
+    const p98High = highs[Math.min(n - 1, Math.floor(n * 0.98))];
+
+    const range = p98High - p2Low;
+    // 5% pad so wicks have breathing room above and below
+    const pad = range * 0.05;
+
+    return [p2Low - pad, p98High + pad];
   })();
 
   return (
