@@ -215,6 +215,7 @@ export function DataTab() {
       ]
     : [0, 1];
 
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -414,7 +415,7 @@ export function DataTab() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Candlestick chart */}
+                  {/* Candlestick chart — X-axis hidden, date shown in volume chart below */}
                   <ResponsiveContainer width="100%" height={400}>
                     <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -429,7 +430,7 @@ export function DataTab() {
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const d = payload[0].payload as OHLCVCandle;
+                          const d = payload[0].payload as any;
                           const up = d.close > d.open;
                           return (
                             <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
@@ -454,7 +455,7 @@ export function DataTab() {
                     </ComposedChart>
                   </ResponsiveContainer>
 
-                  {/* Volume chart */}
+                  {/* Volume chart — X-axis shows date + time */}
                   <ResponsiveContainer width="100%" height={120}>
                     <ComposedChart data={candlestickData} margin={{ top: 0, right: 10, left: 10, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.1} />
@@ -463,23 +464,6 @@ export function DataTab() {
                         stroke="#9CA3AF"
                         style={{ fontSize: 11 }}
                         tickLine={false}
-                        tickFormatter={(val) => {
-                          // val is expected to be a string like "2024-01-15 22:03"
-                          // Show date + time: "Jan 15 22:03"
-                          if (!val) return '';
-                          const parts = val.split(' ');
-                          if (parts.length === 2) {
-                            const datePart = parts[0]; // "2024-01-15"
-                            const timePart = parts[1]; // "22:03"
-                            const d = new Date(datePart);
-                            if (!isNaN(d.getTime())) {
-                              const month = d.toLocaleString('en', { month: 'short' });
-                              const day = d.getDate();
-                              return `${month} ${day} ${timePart}`;
-                            }
-                          }
-                          return val;
-                        }}
                       />
                       <YAxis
                         stroke="#9CA3AF"
@@ -490,7 +474,7 @@ export function DataTab() {
                       <Tooltip
                         content={({ active, payload }) => {
                           if (!active || !payload?.length) return null;
-                          const d = payload[0].payload as OHLCVCandle;
+                          const d = payload[0].payload as any;
                           return (
                             <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
                               <p className="text-gray-400 mb-1">{d.time}</p>
@@ -500,7 +484,7 @@ export function DataTab() {
                         }}
                       />
                       <Bar dataKey="volume">
-                        {candlestickData.map((entry, i) => (
+                        {candlestickData.map((entry: any, i: number) => (
                           <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
                         ))}
                       </Bar>
