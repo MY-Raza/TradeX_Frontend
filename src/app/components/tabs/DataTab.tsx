@@ -31,7 +31,7 @@ const Candlestick = (props: any) => {
   const isGrowing  = close >= open;
   const color      = isGrowing ? '#0ECB81' : '#F6465D';
   const centerX    = x + width / 2;
-  const candleW    = Math.max(width * 0.65, 1.5);
+  const candleW    = Math.max(width * 0.55, 1);
 
   const highPx  = toPixelY(high);
   const lowPx   = toPixelY(low);
@@ -88,14 +88,6 @@ export function DataTab() {
   // ── Chart data ────────────────────────────────────────────────────────────
   const [ohlcvData, setOhlcvData] = useState<OHLCVResponse | null>(null);
 
-  // ── Zoom / pan state ──────────────────────────────────────────────────────
-  const MIN_VISIBLE_CANDLES = 20;
-  const [visibleStartIndex, setVisibleStartIndex] = useState(0);
-  const [visibleEndIndex, setVisibleEndIndex]     = useState(0);
-  const isDragging   = useRef(false);
-  const dragStartX   = useRef(0);
-  const dragStartIdx = useRef(0);
-
   // ── Chart date filter — sent to the API on change ─────────────────────────
   const [chartFromDate, setChartFromDate] = useState('');
   const [chartToDate, setChartToDate]     = useState('');
@@ -114,6 +106,25 @@ export function DataTab() {
       .then(data => { setCoins(data); setCoin(''); })
       .catch(() => setError('Failed to load coins'));
   }, [exchange]);
+
+  // ── Responsive layout ─────────────────────────────────────────────────────
+  // Measure the actual card body width so charts never exceed it.
+  // Also detect mobile breakpoint (< 768 px) for compact axis/spacing.
+  const chartContainerRef                   = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(600);
+  const [isMobile, setIsMobile]             = useState(false);
+
+  useEffect(() => {
+    const measure = () => {
+      if (chartContainerRef.current) {
+        setContainerWidth(chartContainerRef.current.offsetWidth);
+      }
+      setIsMobile(window.innerWidth < 768);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   // ── Core chart loader — accepts an explicit date range ───────────────────
   const loadChart = useCallback(async (
@@ -238,84 +249,22 @@ export function DataTab() {
   // All candles come pre-filtered from the API — no client-side slicing needed
   const candlestickData = ohlcvData?.candles ?? [];
 
-  // ── Initialise / reset visible window when data changes ──────────────────
-  useEffect(() => {
-    if (candlestickData.length === 0) return;
-    setVisibleStartIndex(0);
-    setVisibleEndIndex(candlestickData.length - 1);
-  }, [candlestickData.length]);
-
-  // ── Derive the slice currently on screen ─────────────────────────────────
-  const visibleCandles = candlestickData.slice(visibleStartIndex, visibleEndIndex + 1);
-
-  // ── Dynamic Y-domain based only on visible candles ────────────────────────
   const yDomain: [number, number] = (() => {
-    const data = visibleCandles.length ? visibleCandles : candlestickData;
-    if (!data.length) return [0, 1];
-    const minPrice = Math.min(...data.map((c: any) => c.low));
-    const maxPrice = Math.max(...data.map((c: any) => c.high));
-    const range    = maxPrice - minPrice;
-    const pad      = range * 0.025;          // tighter padding → larger candles
+    if (!candlestickData.length) return [0, 1];
+
+    const lows = candlestickData.map((c: any) => c.low);
+    const highs = candlestickData.map((c: any) => c.high);
+
+    const minPrice = Math.min(...lows);
+    const maxPrice = Math.max(...highs);
+
+    const range = maxPrice - minPrice;
+
+    // Binance-like tight scaling
+    const pad = range * 0.05;
+
     return [minPrice - pad, maxPrice + pad];
   })();
-
-  // ── Mouse wheel zoom ──────────────────────────────────────────────────────
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const total   = candlestickData.length;
-    if (!total) return;
-
-    const visibleCount = visibleEndIndex - visibleStartIndex + 1;
-    const zoomFactor   = e.deltaY > 0 ? 1.15 : 0.87;   // scroll-down = zoom out, scroll-up = zoom in
-    const newCount     = Math.round(visibleCount * zoomFactor);
-    const clampedCount = Math.min(Math.max(newCount, MIN_VISIBLE_CANDLES), total);
-
-    // Keep zoom centred around mouse cursor position within the chart
-    const rect        = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const ratio       = (e.clientX - rect.left) / rect.width;
-    const centerIdx   = visibleStartIndex + Math.round(ratio * visibleCount);
-
-    let newStart = Math.round(centerIdx - ratio * clampedCount);
-    let newEnd   = newStart + clampedCount - 1;
-
-    // Clamp to dataset bounds
-    if (newStart < 0) { newStart = 0; newEnd = clampedCount - 1; }
-    if (newEnd >= total) { newEnd = total - 1; newStart = Math.max(0, newEnd - clampedCount + 1); }
-
-    setVisibleStartIndex(newStart);
-    setVisibleEndIndex(newEnd);
-  }, [candlestickData.length, visibleStartIndex, visibleEndIndex]);
-
-  // ── Drag / pan ────────────────────────────────────────────────────────────
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    isDragging.current   = true;
-    dragStartX.current   = e.clientX;
-    dragStartIdx.current = visibleStartIndex;
-  }, [visibleStartIndex]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging.current) return;
-    const total        = candlestickData.length;
-    if (!total) return;
-
-    const visibleCount = visibleEndIndex - visibleStartIndex + 1;
-    const rect         = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const pxPerCandle  = rect.width / visibleCount;
-    const deltaPx      = e.clientX - dragStartX.current;
-    const deltaCandles = Math.round(-deltaPx / pxPerCandle);
-
-    let newStart = dragStartIdx.current + deltaCandles;
-    let newEnd   = newStart + visibleCount - 1;
-
-    if (newStart < 0)       { newStart = 0; newEnd = visibleCount - 1; }
-    if (newEnd >= total)    { newEnd = total - 1; newStart = total - visibleCount; }
-
-    setVisibleStartIndex(newStart);
-    setVisibleEndIndex(newEnd);
-  }, [candlestickData.length, visibleEndIndex, visibleStartIndex]);
-
-  const handleMouseUp = useCallback(() => { isDragging.current = false; }, []);
-  const handleMouseLeave = useCallback(() => { isDragging.current = false; }, []);
 
   return (
     <motion.div
@@ -484,15 +433,15 @@ export function DataTab() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
-              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
-                <CardTitle>
+            <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800" style={{ minWidth: 0, overflow: 'hidden' }}>
+              <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-4 px-3 md:px-6">
+                <CardTitle className="text-base md:text-xl shrink-0">
                   Candlestick Chart – {coin.toUpperCase()}
                   <span className="ml-2 text-sm font-normal text-gray-400 dark:text-gray-500">1m</span>
                 </CardTitle>
 
                 {/* ── Chart date range filter — triggers API re-fetch ─── */}
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1 md:gap-2 flex-wrap min-w-0">
                   <CalendarIcon className="w-4 h-4 text-gray-400 shrink-0" />
                   <div className="flex items-center gap-1">
                     <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">From</label>
@@ -501,9 +450,9 @@ export function DataTab() {
                       value={chartFromDate}
                       max={chartToDate || undefined}
                       onChange={e => setChartFromDate(e.target.value)}
-                      className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
+                      className="h-8 px-1 md:px-2 rounded-md border border-gray-300 dark:border-gray-700
                         text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-[130px] md:w-auto"
                     />
                   </div>
                   <div className="flex items-center gap-1">
@@ -513,9 +462,9 @@ export function DataTab() {
                       value={chartToDate}
                       min={chartFromDate || undefined}
                       onChange={e => setChartToDate(e.target.value)}
-                      className="h-8 px-2 rounded-md border border-gray-300 dark:border-gray-700
+                      className="h-8 px-1 md:px-2 rounded-md border border-gray-300 dark:border-gray-700
                         text-xs bg-white dark:bg-[#0B0F19] text-gray-900 dark:text-white
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors w-[130px] md:w-auto"
                     />
                   </div>
                   {(chartFromDate || chartToDate) && (
@@ -530,14 +479,16 @@ export function DataTab() {
                     </button>
                   )}
                   <span className="text-xs text-blue-400 whitespace-nowrap">
-                    {visibleCandles.length}/{candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
+                    {candlestickData.length} candle{candlestickData.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </CardHeader>
 
-              <CardContent>
-                {/* Summary stats */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+              <CardContent className="px-3 md:px-6">
+                {/* min-width:0 on the inner div prevents flexbox children
+                    from forcing the card wider than the viewport */}
+                <div style={{ minWidth: 0, width: '100%', overflow: 'hidden' }}>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-4 mb-4 md:mb-6">
                   {[
                     { label: 'Open',   value: `$${ohlcvData.open.toLocaleString()}`,         color: 'text-gray-900 dark:text-white' },
                     { label: 'High',   value: `$${ohlcvData.high.toLocaleString()}`,          color: 'text-green-500' },
@@ -545,9 +496,9 @@ export function DataTab() {
                     { label: 'Close',  value: `$${ohlcvData.close.toLocaleString()}`,         color: 'text-gray-900 dark:text-white' },
                     { label: 'Volume', value: ohlcvData.total_volume.toLocaleString(),        color: 'text-blue-500' },
                   ].map((s) => (
-                    <div key={s.label} className="p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
+                    <div key={s.label} className="p-2 md:p-4 bg-gray-50 dark:bg-[#0B0F19] rounded-xl">
                       <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>
-                      <p className={`text-lg font-bold mt-1 ${s.color}`}>{s.value}</p>
+                      <p className={`text-sm md:text-lg font-bold mt-1 truncate ${s.color}`}>{s.value}</p>
                     </div>
                   ))}
                 </div>
@@ -566,141 +517,169 @@ export function DataTab() {
                     </div>
                   ) : (
                     <>
-                      {/* Zoom/pan wrapper — handles wheel + drag events.
-                          Candle width adapts to the visible count so candles
-                          stay readable at any zoom level. */}
+                      {/* ── Responsive chart block ──────────────────────────
+                          containerWidth is measured from the real DOM so the
+                          chart never exceeds its parent on any screen size.
+                          On mobile we show fewer candles by default and use
+                          compact axis settings; desktop layout is unchanged. */}
                       {(() => {
-                        const Y_AXIS_W      = 70;
-                        const CHART_HEIGHT  = 600;
-                        const visibleCount  = visibleCandles.length || 1;
-                        // Keep a minimum canvas width; each visible candle gets
-                        // at least 8 px so wicks render properly even zoomed out.
-                        const MIN_CANDLE_PX = 8;
-                        const canvasW = Math.max(visibleCount * MIN_CANDLE_PX + Y_AXIS_W, 600);
+                        // Axis / margin dimensions — tighter on mobile
+                        const Y_AXIS_W     = isMobile ? 52 : 70;
+                        const chartMargin  = isMobile
+                          ? { top: 6,  right: 4,  left: 0, bottom: 0 }
+                          : { top: 10, right: 10, left: 10, bottom: 0 };
+                        const volMargin    = isMobile
+                          ? { top: 0,  right: 4,  left: 0, bottom: 6 }
+                          : { top: 0,  right: 10, left: 10, bottom: 10 };
+
+                        // Chart heights — shorter on mobile
+                        const CANDLE_H = isMobile ? 340 : 600;
+                        const VOL_H    = isMobile ? 80  : 120;
+
+                        // Adaptive candle density:
+                        // On mobile show ~60 candles by default; desktop ~150.
+                        // The rendered canvas is always exactly containerWidth so
+                        // there is zero horizontal overflow.
+                        const defaultVisible = isMobile ? 60 : 150;
+                        const visibleSlice   = candlestickData.slice(
+                          Math.max(0, candlestickData.length - defaultVisible)
+                        );
+
+                        // X-axis tick interval — fewer labels on mobile
+                        const xTickInterval  = Math.ceil(visibleSlice.length / (isMobile ? 4 : 12));
+                        const axisFontSize   = isMobile ? 10 : 12;
+                        const yFormatter     = (v: number) =>
+                          isMobile
+                            ? `$${(v / 1000).toFixed(1)}k`
+                            : `$${(v / 1000).toFixed(1)}k`;
+
+                        // Y-domain from the visible slice only
+                        const sliceDomain: [number, number] = (() => {
+                          if (!visibleSlice.length) return yDomain;
+                          const minP = Math.min(...visibleSlice.map((c: any) => c.low));
+                          const maxP = Math.max(...visibleSlice.map((c: any) => c.high));
+                          const rng  = maxP - minP;
+                          return [minP - rng * 0.025, maxP + rng * 0.025];
+                        })();
 
                         return (
+                          // Outer wrapper: 100 % wide, no overflow, flex child
+                          // uses min-width:0 to prevent flexbox blowout
                           <div
-                            style={{ overflowX: 'hidden', overflowY: 'hidden', cursor: isDragging.current ? 'grabbing' : 'grab', userSelect: 'none' }}
-                            className="w-full"
-                            onWheel={handleWheel}
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                            onMouseLeave={handleMouseLeave}
+                            ref={chartContainerRef}
+                            style={{
+                              width: '100%',
+                              maxWidth: '100%',
+                              minWidth: 0,
+                              overflow: 'hidden',
+                            }}
                           >
-                            {/* Zoom level hint */}
-                            <div className="flex justify-end items-center gap-3 mb-1 px-1">
-                              <span className="text-xs text-gray-500 dark:text-gray-500 select-none">
-                                🔍 {visibleCount} candles visible · scroll to zoom · drag to pan
-                              </span>
-                            </div>
-
-                            {/* Candlestick chart */}
-                            <div style={{ width: '100%' }}>
-                              <ComposedChart
-                                width={canvasW}
-                                height={CHART_HEIGHT}
-                                data={visibleCandles}
-                                margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-                                style={{ transition: 'all 0.1s ease' }}
-                              >
-                                <CartesianGrid
-                                  stroke="#1f2937"
-                                  strokeDasharray="0"
-                                  opacity={0.25}
-                                />
-                                <XAxis dataKey="time" hide />
-                                <YAxis
-                                  stroke="#9CA3AF"
-                                  domain={yDomain}
-                                  style={{ fontSize: 12 }}
-                                  tickLine={false}
-                                  tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
-                                />
-                                <Tooltip
-                                  content={({ active, payload }) => {
-                                    if (!active || !payload?.length) return null;
-                                    const d = payload[0].payload as any;
-                                    const up = d.close > d.open;
-                                    return (
-                                      <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
-                                        <p className="text-gray-400 mb-2">{d.time}</p>
-                                        {(['open', 'high', 'low', 'close'] as const).map((k) => (
-                                          <div key={k} className="flex justify-between gap-4">
-                                            <span className="text-gray-400 capitalize">{k}:</span>
-                                            <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
-                                              ${d[k].toLocaleString()}
-                                            </span>
-                                          </div>
-                                        ))}
-                                        <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
-                                          <span className="text-gray-400">Volume:</span>
-                                          <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
+                            {/* Candlestick chart — fixed to measured container width */}
+                            <ComposedChart
+                              width={containerWidth}
+                              height={CANDLE_H}
+                              data={visibleSlice}
+                              margin={chartMargin}
+                            >
+                              <CartesianGrid
+                                stroke="#1f2937"
+                                strokeDasharray="0"
+                                opacity={0.25}
+                              />
+                              <XAxis dataKey="time" hide />
+                              <YAxis
+                                width={Y_AXIS_W}
+                                stroke="#9CA3AF"
+                                domain={sliceDomain}
+                                style={{ fontSize: axisFontSize }}
+                                tickLine={false}
+                                tickFormatter={yFormatter}
+                                tick={{ fontSize: axisFontSize }}
+                              />
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const d  = payload[0].payload as any;
+                                  const up = d.close > d.open;
+                                  return (
+                                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-lg text-xs">
+                                      <p className="text-gray-400 mb-2">{d.time}</p>
+                                      {(['open', 'high', 'low', 'close'] as const).map((k) => (
+                                        <div key={k} className="flex justify-between gap-4">
+                                          <span className="text-gray-400 capitalize">{k}:</span>
+                                          <span className={`font-medium ${k === 'high' ? 'text-green-400' : k === 'low' ? 'text-red-400' : k === 'close' ? (up ? 'text-green-400' : 'text-red-400') : 'text-white'}`}>
+                                            ${d[k].toLocaleString()}
+                                          </span>
                                         </div>
+                                      ))}
+                                      <div className="flex justify-between gap-4 pt-1 border-t border-gray-700 mt-1">
+                                        <span className="text-gray-400">Volume:</span>
+                                        <span className="text-cyan-400 font-medium">{d.volume.toLocaleString()}</span>
                                       </div>
-                                    );
-                                  }}
-                                />
-                                <Bar
-                                  dataKey="close"
-                                  shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={yDomain} />}
-                                  isAnimationActive={false}
-                                  background={{ fill: 'transparent' }}
-                                />
-                              </ComposedChart>
-                            </div>
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Bar
+                                dataKey="close"
+                                shape={(barProps: any) => <Candlestick {...barProps} explicitDomain={sliceDomain} />}
+                                isAnimationActive={false}
+                                background={{ fill: 'transparent' }}
+                              />
+                            </ComposedChart>
 
-                            {/* Volume chart — same data slice */}
-                            <div style={{ width: '100%' }}>
-                              <ComposedChart
-                                width={canvasW}
-                                height={120}
-                                data={visibleCandles}
-                                margin={{ top: 0, right: 10, left: 10, bottom: 10 }}
-                                style={{ transition: 'all 0.1s ease' }}
-                              >
-                                <CartesianGrid
-                                  stroke="#1f2937"
-                                  strokeDasharray="0"
-                                  opacity={0.25}
-                                />
-                                <XAxis
-                                  dataKey="time"
-                                  stroke="#9CA3AF"
-                                  style={{ fontSize: 11 }}
-                                  tickLine={false}
-                                  interval={Math.ceil(visibleCount / 12)}
-                                />
-                                <YAxis
-                                  stroke="#9CA3AF"
-                                  style={{ fontSize: 12 }}
-                                  tickLine={false}
-                                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
-                                />
-                                <Tooltip
-                                  content={({ active, payload }) => {
-                                    if (!active || !payload?.length) return null;
-                                    const d = payload[0].payload as any;
-                                    return (
-                                      <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
-                                        <p className="text-gray-400 mb-1">{d.time}</p>
-                                        <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
-                                      </div>
-                                    );
-                                  }}
-                                />
-                                <Bar dataKey="volume">
-                                  {visibleCandles.map((entry: any, i: number) => (
-                                    <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
-                                  ))}
-                                </Bar>
-                              </ComposedChart>
-                            </div>
+                            {/* Volume chart — same width, no overflow */}
+                            <ComposedChart
+                              width={containerWidth}
+                              height={VOL_H}
+                              data={visibleSlice}
+                              margin={volMargin}
+                            >
+                              <CartesianGrid
+                                stroke="#1f2937"
+                                strokeDasharray="0"
+                                opacity={0.25}
+                              />
+                              <XAxis
+                                dataKey="time"
+                                stroke="#9CA3AF"
+                                style={{ fontSize: axisFontSize }}
+                                tickLine={false}
+                                interval={xTickInterval}
+                                tick={{ fontSize: axisFontSize }}
+                              />
+                              <YAxis
+                                width={Y_AXIS_W}
+                                stroke="#9CA3AF"
+                                style={{ fontSize: axisFontSize }}
+                                tickLine={false}
+                                tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`}
+                                tick={{ fontSize: axisFontSize }}
+                              />
+                              <Tooltip
+                                content={({ active, payload }) => {
+                                  if (!active || !payload?.length) return null;
+                                  const d = payload[0].payload as any;
+                                  return (
+                                    <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 shadow-lg text-xs">
+                                      <p className="text-gray-400 mb-1">{d.time}</p>
+                                      <p className="text-cyan-400">Volume: {d.volume.toLocaleString()}</p>
+                                    </div>
+                                  );
+                                }}
+                              />
+                              <Bar dataKey="volume">
+                                {visibleSlice.map((entry: any, i: number) => (
+                                  <Cell key={`cell-${i}`} fill={entry.close > entry.open ? '#0ECB81' : '#F6465D'} opacity={0.5} />
+                                ))}
+                              </Bar>
+                            </ComposedChart>
                           </div>
                         );
                       })()}
                     </>
                   )}
+                </div>
                 </div>
               </CardContent>
             </Card>
