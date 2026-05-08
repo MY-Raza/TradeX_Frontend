@@ -230,8 +230,8 @@ export function DataTab() {
     const minPrice = Math.min(...allLows);
     const maxPrice = Math.max(...allHighs);
     const range    = maxPrice - minPrice;
-    // Pad by 5 % of the visible price range — same tight zoom Binance uses
-    const pad = range * 0.05;
+    // Pad by 2 % of the visible price range — same tight zoom Binance uses
+    const pad = range * 0.02;
     return [minPrice - pad, maxPrice + pad];
   })();
 
@@ -501,7 +501,7 @@ export function DataTab() {
                             <div style={{ width: canvasW, minWidth: '100%' }}>
                               <ComposedChart
                                 width={canvasW}
-                                height={400}
+                                height={600}
                                 data={candlestickData}
                                 margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                               >
