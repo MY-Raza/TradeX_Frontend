@@ -225,13 +225,27 @@ export function DataTab() {
 
   const yDomain: [number, number] = (() => {
     if (!candlestickData.length) return [0, 1];
-    const allLows  = candlestickData.map((c: any) => c.low);
-    const allHighs = candlestickData.map((c: any) => c.high);
-    const minPrice = Math.min(...allLows);
-    const maxPrice = Math.max(...allHighs);
+
+    // When a fromDate filter loads thousands of candles spanning a large price
+    // journey (e.g. $78k→$82k over several days), using the global min/max
+    // squishes every 1-min candle into a tiny sliver.
+    //
+    // Solution: compute the domain from the LAST 300 candles (≈5 hrs of 1m
+    // data) — the most recent local window. The Y-axis always zooms to current
+    // price action regardless of total candle count, exactly like Binance.
+    const WINDOW = 300;
+    const slice  = candlestickData.slice(-WINDOW);
+
+    const sliceLows  = slice.map((c: any) => c.low);
+    const sliceHighs = slice.map((c: any) => c.high);
+
+    const minPrice = Math.min(...sliceLows);
+    const maxPrice = Math.max(...sliceHighs);
     const range    = maxPrice - minPrice;
-    // Pad by 2 % of the visible price range — same tight zoom Binance uses
-    const pad = range * 0.02;
+
+    // 10% pad gives wicks comfortable breathing room within the local window
+    const pad = range * 0.10;
+
     return [minPrice - pad, maxPrice + pad];
   })();
 
