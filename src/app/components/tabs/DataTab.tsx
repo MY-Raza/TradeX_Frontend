@@ -158,25 +158,28 @@ export function DataTab() {
           setStartDate(lockedDate);
           setStartDateLocked(true);
           setLastDbDate(lockedDate);
+          // Auto-load chart using the DB's last date as fromDate so we
+          // immediately show real stored data without any default/mock candles.
+          setIsCheckingDb(false);
+          loadChart(exchange, coin, lockedDate, undefined);
         } else {
           setStartDateLocked(false);
           setLastDbDate(null);
+          setIsCheckingDb(false);
         }
       })
       .catch(() => {
         setStartDateLocked(false);
         setLastDbDate(null);
-      })
-      .finally(() => {
         setIsCheckingDb(false);
-        // Load latest 120 candles (no date filter) on initial load
-        loadChart(exchange, coin);
       });
   }, [exchange, coin]);
 
   // ── Re-fetch when chart date filter changes ───────────────────────────────
   useEffect(() => {
-    if (!exchange || !coin || !showChart) return;
+    if (!exchange || !coin) return;
+    // Allow loading even if chart not yet shown — this is how DB data first appears
+    if (!chartFromDate && !chartToDate) return;
     loadChart(exchange, coin, chartFromDate || undefined, chartToDate || undefined);
   }, [chartFromDate, chartToDate]);
 
