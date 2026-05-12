@@ -552,7 +552,7 @@ export function DataTab() {
                   ))}
                 </div>
 
-                <div className="space-y-4 min-w-0 overflow-hidden">
+                <div className="space-y-4">
                   {candlestickData.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-48 text-gray-400 dark:text-gray-500">
                       <CalendarIcon className="w-10 h-10 mb-3 opacity-40" />
@@ -580,7 +580,7 @@ export function DataTab() {
 
                         return (
                           <div
-                            style={{ overflowX: 'auto', overflowY: 'hidden', cursor: isDragging.current ? 'grabbing' : 'grab', userSelect: 'none', maxWidth: '100%' }}
+                            style={{ overflowX: 'hidden', overflowY: 'hidden', cursor: isDragging.current ? 'grabbing' : 'grab', userSelect: 'none' }}
                             className="w-full"
                             onWheel={handleWheel}
                             onMouseDown={handleMouseDown}
