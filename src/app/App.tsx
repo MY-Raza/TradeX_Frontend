@@ -46,14 +46,14 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':   return <DashboardTab />;
+      case 'dashboard':   return <DashboardTab onTabChange={setActiveTab} />;
       case 'strategies':  return <StrategiesTab />;
       case 'models':      return <ModelsTab />;
       case 'backtest':    return <BacktestTab />;
       case 'run-history': return <RunHistoryTab />;
       case 'data':        return <DataTab />;
       case 'sentiment':   return <SentimentTab />;
-      default:            return <DashboardTab />;
+      default:            return <DashboardTab onTabChange={setActiveTab} />;
     }
   };
 
