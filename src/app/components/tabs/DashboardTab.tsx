@@ -23,7 +23,11 @@ interface DashboardData {
   winRateData: { name: string; winRate: number }[];
 }
 
-export function DashboardTab() {
+interface DashboardTabProps {
+  onTabChange?: (tab: string) => void;
+}
+
+export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -133,7 +137,6 @@ export function DashboardTab() {
     },
     {
       label: 'Top Strategy PnL',
-      // ✅ Added $ sign before PnL value in KPI card
       value:
         data?.topStrategies[0]?.pnl_sum != null
           ? `${data.topStrategies[0].pnl_sum >= 0 ? '+' : ''}$${data.topStrategies[0].pnl_sum.toFixed(2)}`
@@ -275,7 +278,6 @@ export function DashboardTab() {
                         </p>
                       </div>
                     </div>
-                    {/* ✅ Added $ sign before PnL value in top strategies table */}
                     <span
                       className={`text-sm font-bold ${
                         (s.pnl_sum ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'
@@ -351,7 +353,10 @@ export function DashboardTab() {
               <Plus className="w-5 h-5 mr-2" />
               Train Model
             </Button>
-            <Button className="h-20 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600">
+            <Button
+              onClick={() => onTabChange?.('backtest')}
+              className="h-20 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600"
+            >
               <PlayCircle className="w-5 h-5 mr-2" />
               Run Backtest
             </Button>
