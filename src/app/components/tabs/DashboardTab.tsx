@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, Brain, PlayCircle, Database, Plus, Loader2, TrendingDown } from 'lucide-react';
+import { TrendingUp, Brain, PlayCircle, Database, Plus, Loader2, TrendingDown, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from 'recharts';
@@ -43,28 +43,23 @@ export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
           dataApi.getExchanges(),
         ]);
 
-        // Top 5 strategies by pnl_sum (non-null, descending)
         const sortedStrategies = [...strategiesRes.results]
           .filter((s) => s.pnl_sum !== null)
           .sort((a, b) => (b.pnl_sum ?? 0) - (a.pnl_sum ?? 0))
           .slice(0, 5);
 
-        // All models combined
         const allModels = [...modelsRes.ml, ...modelsRes.dl];
 
-        // Top 5 models by pnl (non-null, descending)
         const topModels = [...allModels]
           .filter((m) => m.pnl !== null)
           .sort((a, b) => (b.pnl ?? 0) - (a.pnl ?? 0))
           .slice(0, 5);
 
-        // PnL chart: top strategies pnl_sum
         const pnlChartData = sortedStrategies.map((s) => ({
           name: s.name.length > 14 ? s.name.slice(0, 14) + '…' : s.name,
           pnl: parseFloat((s.pnl_sum ?? 0).toFixed(2)),
         }));
 
-        // Win rate chart: top models win_rate
         const winRateData = topModels
           .filter((m) => m.win_rate !== null)
           .map((m) => ({
@@ -210,11 +205,7 @@ export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
                     contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                     formatter={(v: number) => [`${v >= 0 ? '+' : ''}$${v}`, 'PnL']}
                   />
-                  <Bar
-                    dataKey="pnl"
-                    radius={[0, 6, 6, 0]}
-                    fill="#3B82F6"
-                  />
+                  <Bar dataKey="pnl" radius={[0, 6, 6, 0]} fill="#3B82F6" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -253,9 +244,8 @@ export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
         </Card>
       </div>
 
-      {/* Top Strategies + Top Models side by side */}
+      {/* Top Strategies + Top Models */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Strategies Table */}
         <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
           <CardHeader>
             <CardTitle>Top Performing Strategies</CardTitle>
@@ -296,7 +286,6 @@ export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
           </CardContent>
         </Card>
 
-        {/* Top Models Table */}
         <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800">
           <CardHeader>
             <CardTitle>Top Performing Models</CardTitle>
@@ -345,8 +334,12 @@ export function DashboardTab({ onTabChange }: DashboardTabProps = {}) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-20 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600">
-              <Plus className="w-5 h-5 mr-2" />
+            {/* ── Create Strategy – now navigates to create-strategy tab ── */}
+            <Button
+              onClick={() => onTabChange?.('create-strategy')}
+              className="h-20 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
               Create Strategy
             </Button>
             <Button className="h-20 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600">
