@@ -312,7 +312,7 @@ export function CreateStrategyTab() {
                     maxLength={100}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Display name — the actual ID (e.g. <code className="font-mono">sig_1h_btc_42</code>) is auto-generated
+                    This name will be shown in your strategy registry and run history
                   </p>
                 </div>
                 <div>
@@ -508,9 +508,9 @@ export function CreateStrategyTab() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold">Strategy created successfully</p>
                 <p className="text-xs text-green-400/80 mt-0.5">
-                  Saved as <code className="font-mono bg-green-500/10 px-1.5 py-0.5 rounded">{result.strategy_id}</code>
-                  {' · '}{result.display_name}
+                  {result.display_name}
                   {' · '}{result.symbol.toUpperCase()} · {result.timeframe} · {result.exchange}
+                  {result.summary.run_table_name && ' · run saved'}
                 </p>
               </div>
             </div>
