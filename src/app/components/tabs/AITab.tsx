@@ -114,9 +114,9 @@ function MessageBubble({ msg }: MessageBubbleProps) {
       </div>
 
       {/* Content */}
-      <div className={`max-w-[78%] ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`max-w-[78%] min-w-0 ${isUser ? 'items-end' : 'items-start'} flex flex-col`}>
         <div
-          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+          className={`px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere min-w-0 w-full ${
             isUser
               ? 'bg-gradient-to-br from-blue-600 to-violet-600 text-white rounded-tr-sm'
               : 'bg-white dark:bg-[#0F1420] border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100 rounded-tl-sm'
@@ -297,12 +297,11 @@ export function AITab() {
       </div>
 
       {/* Chat area */}
-      <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800 flex-1 flex flex-col min-h-0">
+      <Card className="bg-white dark:bg-[#0F1420] border-gray-200 dark:border-gray-800 flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Messages */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto p-6"
-          style={{ minHeight: '400px', maxHeight: 'calc(100vh - 340px)' }}
+          className="flex-1 overflow-y-auto p-6 min-h-0"
         >
           <AnimatePresence mode="popLayout">
             {isEmpty && !isLoading ? (
