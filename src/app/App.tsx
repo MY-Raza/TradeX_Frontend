@@ -10,6 +10,7 @@ import { RunHistoryTab } from './components/tabs/RunHistoryTab';
 import { DataTab } from './components/tabs/DataTab';
 import { SentimentTab } from './components/tabs/SentimentTab';
 import { CreateStrategyTab } from './components/tabs/CreateStrategyTab';
+import { AITab } from './components/tabs/AITab';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -43,6 +44,7 @@ export default function App() {
       case 'data':             return <DataTab />;
       case 'sentiment':        return <SentimentTab />;
       case 'create-strategy':  return <CreateStrategyTab />;
+      case 'ai':               return <AITab />;
       default:                 return <DashboardTab onTabChange={setActiveTab} />;
     }
   };
@@ -57,7 +59,10 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header — hidden on mobile */}
           <div className="hidden md:block">
-            <Header />
+            <Header
+              onOpenAI={() => setActiveTab('ai')}
+              isAIActive={activeTab === 'ai'}
+            />
           </div>
 
           <main

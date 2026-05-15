@@ -215,3 +215,61 @@ export const sentimentApi = {
   run:        (coin: string) => req<SentimentRunResponse>('/sentiment/run', { method: 'POST', body: JSON.stringify({ coin }) }),
   getResults: (coin: string) => req<SentimentResultsResponse>(`/sentiment/results/${coin}`),
 };
+
+// ─── AI ───────────────────────────────────────────────────────────────────────
+
+export interface ToolExecution {
+  tool_name: string;
+  parameters: Record<string, any>;
+  status: 'success' | 'error';
+  error?: string | null;
+  result_summary?: string | null;
+}
+
+export interface AIChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  /** Populated on assistant messages to power the tool trace UI */
+  tools_executed?: ToolExecution[];
+}
+
+export interface AIChatRequest {
+  message: string;
+  session_id?: string;
+}
+
+export interface AIChatResponse {
+  session_id: string;
+  reply: string;
+  tools_executed: ToolExecution[];
+  data: Record<string, any> | null;
+}
+
+export interface AIHistoryResponse {
+  session_id: string;
+  messages: AIChatMessage[];
+  total: number;
+}
+
+export interface AIDeleteHistoryResponse {
+  session_id: string;
+  deleted: boolean;
+  message: string;
+}
+
+export const aiApi = {
+  /** Send a prompt and get an AI response (creates or continues a session) */
+  chat: (body: AIChatRequest) =>
+    req<AIChatResponse>('/ai/chat', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Retrieve text-only conversation history for a session */
+  getHistory: (sessionId: string) =>
+    req<AIHistoryResponse>(`/ai/history/${encodeURIComponent(sessionId)}`),
+
+  /** Clear conversation history for a session */
+  deleteHistory: (sessionId: string) =>
+    req<AIDeleteHistoryResponse>(`/ai/history/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+    }),
+};
