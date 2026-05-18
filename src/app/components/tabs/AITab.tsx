@@ -19,6 +19,9 @@ const SUGGESTED_PROMPTS = [
   'Show me the current BTC sentiment',
   'Compare ML models and show the top performer',
   'What is the win rate of my top strategy on Binance?',
+  'Generate a BTC strategy on Binance 1h timeframe and show the win rate',
+  'Create an aggressive ETH scalping strategy with high leverage on Binance',
+  'Generate 3 BTC strategies on 15m timeframe and compare them',
 ];
 
 // ── Tool execution trace card ──────────────────────────────────────────────
