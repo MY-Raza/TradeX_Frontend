@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Sparkles, Loader2, Calendar, ChevronLeft, ChevronRight,
   CheckCircle2, TrendingUp, TrendingDown, BarChart3, Zap,
+  Plus, X, ChevronDown, Settings2, FlaskConical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -14,54 +15,17 @@ import {
   ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { dataApi, CoinInfo, ExchangeInfo } from '../../../services/api';
+import {
+  dataApi, ExchangeInfo,
+  strategyGeneratorApi, CreateStrategyResponse, IndicatorDetail, WindowConfig,
+} from '../../../services/api';
 
-// ─── API types ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LedgerEntry {
   date: string; type: string; price: number;
   pnl: number | null; pnl_sum: number | null;
   balance: number; direction: string; reason: string | null;
-}
-
-interface BacktestSummary {
-  strategy_name: string; exchange: string; symbol: string;
-  starting_balance: number; final_balance: number; total_pnl_pct: number;
-  total_trades: number; win_trades: number; loss_trades: number;
-  win_rate: number; loss_rate: number;
-  max_consecutive_wins: number; max_consecutive_losses: number;
-  run_table_name: string | null;
-}
-
-interface CreateStrategyResponse {
-  strategy_id: string; display_name: string;
-  timeframe: string; symbol: string; exchange: string;
-  summary: BacktestSummary;
-  ledger: LedgerEntry[];
-  win_loss_data: { name: string; value: number }[];
-  pnl_data: { trade: number; pnl: number }[];
-  message: string;
-}
-
-const BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
-
-async function createStrategy(body: object): Promise<CreateStrategyResponse> {
-  const res = await fetch(`${BASE}/strategy-generator/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? res.statusText);
-  }
-  return res.json();
-}
-
-async function getCoins(exchange: string): Promise<CoinInfo[]> {
-  const res = await fetch(`${BASE}/strategy-generator/coins/${exchange}`);
-  if (!res.ok) return [];
-  return res.json();
 }
 
 // ─── Ledger helpers ──────────────────────────────────────────────────────────
@@ -188,12 +152,365 @@ function InlineLedger({ ledger }: { ledger: LedgerEntry[] }) {
   );
 }
 
+// ─── Window Params Editor ─────────────────────────────────────────────────────
+// Renders per-indicator parameter inputs driven by the registry metadata.
+
+interface WindowParamsEditorProps {
+  indicator: IndicatorDetail;
+  values: Record<string, number>;
+  onChange: (indicatorName: string, params: Record<string, number>) => void;
+}
+
+function WindowParamsEditor({ indicator, values, onChange }: WindowParamsEditorProps) {
+  const paramEntries = Object.entries(indicator.default_params);
+  if (paramEntries.length === 0) return null;
+
+  const handleChange = (paramName: string, raw: string) => {
+    const num = parseFloat(raw);
+    if (!isNaN(num) && num > 0) {
+      onChange(indicator.name, { ...values, [paramName]: num });
+    }
+  };
+
+  return (
+    <div className="mt-2 pl-3 border-l-2 border-blue-500/20 space-y-2">
+      <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">
+        {indicator.name} Parameters
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {paramEntries.map(([paramName, defaultVal]) => (
+          <div key={paramName}>
+            <label className="text-[11px] text-gray-500 block mb-1 font-mono">{paramName}</label>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              value={values[paramName] ?? defaultVal}
+              onChange={e => handleChange(paramName, e.target.value)}
+              className="h-7 text-xs font-mono"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Signal Configuration Section ────────────────────────────────────────────
+// Handles indicator/pattern selection and their nested window configs.
+// Mode can be 'auto' (legacy random) or 'custom' (dynamic).
+
+type SignalMode = 'auto' | 'custom';
+
+interface SignalConfigSectionProps {
+  mode: SignalMode;
+  onModeChange: (m: SignalMode) => void;
+  allIndicators: IndicatorDetail[];
+  allPatterns: string[];
+  selectedIndicators: string[];
+  selectedPatterns: string[];
+  windowConfig: WindowConfig;
+  onIndicatorsChange: (names: string[]) => void;
+  onPatternsChange: (names: string[]) => void;
+  onWindowConfigChange: (cfg: WindowConfig) => void;
+  isLoadingRegistry: boolean;
+}
+
+function SignalConfigSection({
+  mode, onModeChange,
+  allIndicators, allPatterns,
+  selectedIndicators, selectedPatterns,
+  windowConfig,
+  onIndicatorsChange, onPatternsChange, onWindowConfigChange,
+  isLoadingRegistry,
+}: SignalConfigSectionProps) {
+  const [patternSearch, setPatternSearch] = useState('');
+  const [showPatterns, setShowPatterns] = useState(false);
+
+  const filteredPatterns = allPatterns.filter(p =>
+    p.toLowerCase().includes(patternSearch.toLowerCase())
+  );
+
+  const toggleIndicator = (name: string) => {
+    if (selectedIndicators.includes(name)) {
+      onIndicatorsChange(selectedIndicators.filter(n => n !== name));
+      // Remove its window config entry too
+      const next = { ...windowConfig };
+      delete next[name];
+      onWindowConfigChange(next);
+    } else {
+      onIndicatorsChange([...selectedIndicators, name]);
+      // Seed window config with defaults
+      const ind = allIndicators.find(i => i.name === name);
+      if (ind && Object.keys(ind.default_params).length > 0) {
+        onWindowConfigChange({ ...windowConfig, [name]: { ...ind.default_params } });
+      }
+    }
+  };
+
+  const togglePattern = (name: string) => {
+    if (selectedPatterns.includes(name)) {
+      onPatternsChange(selectedPatterns.filter(n => n !== name));
+    } else {
+      onPatternsChange([...selectedPatterns, name]);
+    }
+  };
+
+  const handleWindowParamChange = (indicatorName: string, params: Record<string, number>) => {
+    onWindowConfigChange({ ...windowConfig, [indicatorName]: params });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => onModeChange('auto')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+            mode === 'auto'
+              ? 'bg-violet-500/10 border-violet-500/40 text-violet-400'
+              : 'border-gray-700 text-gray-500 hover:border-gray-500'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Auto (randomised)
+        </button>
+        <button
+          type="button"
+          onClick={() => onModeChange('custom')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+            mode === 'custom'
+              ? 'bg-blue-500/10 border-blue-500/40 text-blue-400'
+              : 'border-gray-700 text-gray-500 hover:border-gray-500'
+          }`}
+        >
+          <Settings2 className="w-3.5 h-3.5" />
+          Custom signals
+        </button>
+      </div>
+
+      {mode === 'auto' && (
+        <p className="text-xs text-gray-500 bg-violet-500/5 border border-violet-500/10 px-3 py-2 rounded-lg">
+          The backend will automatically select and combine indicators for you.
+        </p>
+      )}
+
+      <AnimatePresence>
+        {mode === 'custom' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-5 pt-1">
+              {isLoadingRegistry ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading indicator registry…
+                </div>
+              ) : (
+                <>
+                  {/* ── Indicators ── */}
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5 font-medium">
+                      <BarChart3 className="w-3.5 h-3.5 text-blue-400" />
+                      Indicators
+                      {selectedIndicators.length > 0 && (
+                        <Badge className="ml-1 bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]">
+                          {selectedIndicators.length} selected
+                        </Badge>
+                      )}
+                    </label>
+
+                    {/* Indicator chips */}
+                    <div className="flex flex-wrap gap-2">
+                      {allIndicators.map(ind => {
+                        const active = selectedIndicators.includes(ind.name);
+                        return (
+                          <button
+                            key={ind.name}
+                            type="button"
+                            onClick={() => toggleIndicator(ind.name)}
+                            className={`px-3 py-1 rounded-full text-xs font-mono font-medium border transition-all ${
+                              active
+                                ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
+                                : 'border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300'
+                            }`}
+                          >
+                            {active && <span className="mr-1">✓</span>}
+                            {ind.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Window param editors for selected indicators */}
+                    {selectedIndicators.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        {selectedIndicators.map(name => {
+                          const ind = allIndicators.find(i => i.name === name);
+                          if (!ind || Object.keys(ind.default_params).length === 0) return null;
+                          return (
+                            <WindowParamsEditor
+                              key={name}
+                              indicator={ind}
+                              values={windowConfig[name] ?? ind.default_params}
+                              onChange={handleWindowParamChange}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── Patterns ── */}
+                  <div>
+                    <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1.5 font-medium">
+                      <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
+                      Candlestick Patterns
+                      {selectedPatterns.length > 0 && (
+                        <Badge className="ml-1 bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">
+                          {selectedPatterns.length} selected
+                        </Badge>
+                      )}
+                    </label>
+
+                    {/* Selected pattern tags */}
+                    {selectedPatterns.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {selectedPatterns.map(p => (
+                          <span
+                            key={p}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono bg-amber-500/10 border border-amber-500/30 text-amber-300"
+                          >
+                            {p}
+                            <button type="button" onClick={() => togglePattern(p)} className="hover:text-red-400 transition-colors">
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Pattern picker toggle */}
+                    <button
+                      type="button"
+                      onClick={() => setShowPatterns(v => !v)}
+                      className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {showPatterns ? 'Hide patterns' : 'Add patterns'}
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showPatterns ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showPatterns && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-2 p-3 rounded-lg border border-gray-800 bg-[#0B0F19] space-y-2">
+                            <Input
+                              value={patternSearch}
+                              onChange={e => setPatternSearch(e.target.value)}
+                              placeholder="Search patterns…"
+                              className="h-7 text-xs"
+                            />
+                            <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                              {filteredPatterns.map(p => {
+                                const active = selectedPatterns.includes(p);
+                                return (
+                                  <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => togglePattern(p)}
+                                    className={`px-2 py-0.5 rounded-full text-[11px] font-mono border transition-all ${
+                                      active
+                                        ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
+                                        : 'border-gray-700 text-gray-500 hover:border-amber-500/30 hover:text-amber-300'
+                                    }`}
+                                  >
+                                    {p}
+                                  </button>
+                                );
+                              })}
+                              {filteredPatterns.length === 0 && (
+                                <p className="text-xs text-gray-600 py-1">No patterns match</p>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Validation hint */}
+                  {selectedIndicators.length === 0 && selectedPatterns.length === 0 && (
+                    <p className="text-xs text-amber-500/80 bg-amber-500/5 border border-amber-500/10 px-3 py-2 rounded-lg">
+                      Select at least one indicator or pattern, or switch to Auto mode.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Signal Provenance Badge List ────────────────────────────────────────────
+// Shown in the results section when dynamic mode was used.
+
+function SignalProvenanceBadges({ result }: { result: CreateStrategyResponse }) {
+  const hasSignals = result.indicators_used.length > 0 || result.patterns_used.length > 0;
+  if (!hasSignals) return null;
+
+  return (
+    <div className="px-4 py-3 rounded-xl bg-blue-500/5 border border-blue-500/15 space-y-2">
+      <p className="text-xs font-medium text-gray-400">Signals used in this strategy</p>
+      <div className="flex flex-wrap gap-1.5">
+        {result.indicators_used.map(name => {
+          const params = result.windows_used[name];
+          const paramsStr = params
+            ? Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ')
+            : null;
+          return (
+            <span
+              key={name}
+              title={paramsStr ?? undefined}
+              className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-blue-500/10 border border-blue-500/20 text-blue-300"
+            >
+              {name}{paramsStr ? ` (${paramsStr})` : ''}
+            </span>
+          );
+        })}
+        {result.patterns_used.map(name => (
+          <span
+            key={name}
+            className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-amber-500/10 border border-amber-500/20 text-amber-300"
+          >
+            {name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const TIMEFRAMES = ['1h', '15m', '5m'];
 
 export function CreateStrategyTab() {
-  // Form state
+  // ── Form state ──────────────────────────────────────────────────────────────
   const [name, setName]           = useState('');
   const [timeframe, setTimeframe] = useState('1h');
   const [exchange, setExchange]   = useState('');
@@ -204,11 +521,20 @@ export function CreateStrategyTab() {
   const [stopLoss, setStopLoss]     = useState('1.0');
   const [startingBalance, setStartingBalance] = useState('1000');
 
-  // Data
-  const [exchanges, setExchanges] = useState<ExchangeInfo[]>([]);
-  const [coins, setCoins]         = useState<CoinInfo[]>([]);
+  // ── Signal config state ─────────────────────────────────────────────────────
+  const [signalMode, setSignalMode]               = useState<SignalMode>('auto');
+  const [allIndicators, setAllIndicators]         = useState<IndicatorDetail[]>([]);
+  const [allPatterns, setAllPatterns]             = useState<string[]>([]);
+  const [selectedIndicators, setSelectedIndicators] = useState<string[]>([]);
+  const [selectedPatterns, setSelectedPatterns]   = useState<string[]>([]);
+  const [windowConfig, setWindowConfig]           = useState<WindowConfig>({});
+  const [isLoadingRegistry, setIsLoadingRegistry] = useState(false);
 
-  // UI state
+  // ── Exchange / coin state ───────────────────────────────────────────────────
+  const [exchanges, setExchanges] = useState<ExchangeInfo[]>([]);
+  const [coins, setCoins]         = useState<{ symbol: string; label: string }[]>([]);
+
+  // ── UI state ────────────────────────────────────────────────────────────────
   const [isLoadingExchanges, setIsLoadingExchanges] = useState(true);
   const [isLoadingCoins, setIsLoadingCoins]         = useState(false);
   const [isCreating, setIsCreating]                 = useState(false);
@@ -228,21 +554,44 @@ export function CreateStrategyTab() {
     if (!exchange) { setCoins([]); setSymbol(''); return; }
     setIsLoadingCoins(true);
     setSymbol('');
-    getCoins(exchange)
+    strategyGeneratorApi.getCoins(exchange)
       .then(setCoins)
       .finally(() => setIsLoadingCoins(false));
   }, [exchange]);
 
-  const canCreate = name.trim() && timeframe && exchange && symbol && !isCreating;
+  // Load indicator/pattern registry when custom mode is first activated
+  useEffect(() => {
+    if (signalMode !== 'custom' || allIndicators.length > 0) return;
+    setIsLoadingRegistry(true);
+    Promise.all([
+      strategyGeneratorApi.getIndicators(),
+      strategyGeneratorApi.getPatterns(),
+    ])
+      .then(([indRes, patRes]) => {
+        setAllIndicators(indRes.indicators);
+        setAllPatterns(patRes.patterns);
+      })
+      .catch(() => setError('Failed to load indicator registry'))
+      .finally(() => setIsLoadingRegistry(false));
+  }, [signalMode, allIndicators.length]);
 
-  const handleCreate = async () => {
+  // ── Validation ──────────────────────────────────────────────────────────────
+  const signalConfigValid = signalMode === 'auto' ||
+    selectedIndicators.length > 0 || selectedPatterns.length > 0;
+
+  const canCreate = Boolean(
+    name.trim() && timeframe && exchange && symbol && !isCreating && signalConfigValid
+  );
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  const handleCreate = useCallback(async () => {
     if (!canCreate) return;
     setIsCreating(true);
     setResult(null);
     setError('');
 
     try {
-      const res = await createStrategy({
+      const payload = {
         name: name.trim(),
         timeframe,
         exchange,
@@ -252,17 +601,33 @@ export function CreateStrategyTab() {
         starting_balance: parseFloat(startingBalance) || 1000,
         take_profit: parseFloat(takeProfit) || 3.0,
         stop_loss:   parseFloat(stopLoss)   || 1.0,
-      });
+        // Dynamic signal fields — omitted in auto mode for full backend compat
+        ...(signalMode === 'custom' && {
+          indicators: selectedIndicators,
+          patterns:   selectedPatterns,
+          window_config: Object.keys(windowConfig).length > 0 ? windowConfig : undefined,
+        }),
+      };
+      const res = await strategyGeneratorApi.create(payload);
       setResult(res);
     } catch (e: any) {
       setError(e.message ?? 'Strategy creation failed');
     } finally {
       setIsCreating(false);
     }
-  };
+  }, [
+    canCreate, name, timeframe, exchange, symbol, startDate, endDate,
+    startingBalance, takeProfit, stopLoss,
+    signalMode, selectedIndicators, selectedPatterns, windowConfig,
+  ]);
 
   const summary = result?.summary;
   const pnlPositive = (summary?.total_pnl_pct ?? 0) >= 0;
+
+  // Loading description adapts to mode
+  const loadingDescription = signalMode === 'custom'
+    ? 'Applying custom signals · Running voting combiner · Executing backtest'
+    : 'Randomising indicators · Running signal combiner · Executing backtest';
 
   return (
     <motion.div
@@ -279,7 +644,7 @@ export function CreateStrategyTab() {
             Create Strategy
           </h2>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
-            Generate a randomised indicator strategy, backtest it, and save it to your registry
+            Generate an indicator strategy, backtest it, and save it to your registry
           </p>
         </div>
       </div>
@@ -441,6 +806,27 @@ export function CreateStrategyTab() {
                   />
                 </div>
               </div>
+
+              {/* Row 5: Signal Configuration (NEW) */}
+              <div>
+                <label className="text-sm text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-1.5 font-medium">
+                  <Settings2 className="w-3.5 h-3.5 text-blue-400" />
+                  Signal Configuration
+                </label>
+                <SignalConfigSection
+                  mode={signalMode}
+                  onModeChange={setSignalMode}
+                  allIndicators={allIndicators}
+                  allPatterns={allPatterns}
+                  selectedIndicators={selectedIndicators}
+                  selectedPatterns={selectedPatterns}
+                  windowConfig={windowConfig}
+                  onIndicatorsChange={setSelectedIndicators}
+                  onPatternsChange={setSelectedPatterns}
+                  onWindowConfigChange={setWindowConfig}
+                  isLoadingRegistry={isLoadingRegistry}
+                />
+              </div>
             </>
           )}
 
@@ -458,7 +844,7 @@ export function CreateStrategyTab() {
             disabled={!canCreate}
           >
             {isCreating ? (
-              <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Generating strategy & running backtest…</>
+              <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Generating strategy &amp; running backtest…</>
             ) : (
               <><Sparkles className="w-5 h-5 mr-2" />Create Strategy</>
             )}
@@ -484,7 +870,7 @@ export function CreateStrategyTab() {
                   Building your strategy…
                 </p>
                 <div className="text-sm text-gray-500 dark:text-gray-400 text-center space-y-1">
-                  <p>Randomising indicators · Running signal combiner · Executing backtest</p>
+                  <p>{loadingDescription}</p>
                   <p className="text-xs">This may take 15–60 seconds depending on the date range</p>
                 </div>
               </CardContent>
@@ -514,6 +900,9 @@ export function CreateStrategyTab() {
                 </p>
               </div>
             </div>
+
+            {/* Signal provenance (only shown for dynamic strategies) */}
+            <SignalProvenanceBadges result={result} />
 
             {/* Summary KPIs */}
             {summary && (
@@ -631,7 +1020,14 @@ export function CreateStrategyTab() {
             <div className="flex justify-center pb-4">
               <Button
                 variant="outline"
-                onClick={() => { setResult(null); setError(''); setName(''); }}
+                onClick={() => {
+                  setResult(null);
+                  setError('');
+                  setName('');
+                  setSelectedIndicators([]);
+                  setSelectedPatterns([]);
+                  setWindowConfig({});
+                }}
                 className="gap-2"
               >
                 <Sparkles className="w-4 h-4" />

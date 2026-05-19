@@ -216,6 +216,169 @@ export const sentimentApi = {
   getResults: (coin: string) => req<SentimentResultsResponse>(`/sentiment/results/${coin}`),
 };
 
+// ─── Strategy Generator ───────────────────────────────────────────────────────
+
+/**
+ * Per-indicator parameter override map.
+ * Keys are indicator names (e.g. "RSI", "MACD").
+ * Values are dicts of parameter name → numeric value.
+ *
+ * Example:
+ *   { RSI: { period: 21 }, MACD: { fastperiod: 8, slowperiod: 21, signalperiod: 9 } }
+ */
+export type WindowConfig = Record<string, Record<string, number>>;
+
+/**
+ * Registry metadata for a single indicator, returned by
+ * GET /strategy-generator/indicators.
+ */
+export interface IndicatorDetail {
+  name: string;
+  signal_type: string;
+  inputs: string[];
+  /** Logical parameter names → TA-Lib parameter names */
+  params: Record<string, string>;
+  /** Sensible default values for each parameter */
+  default_params: Record<string, number>;
+}
+
+export interface IndicatorListResponse {
+  count: number;
+  indicators: IndicatorDetail[];
+}
+
+export interface PatternListResponse {
+  count: number;
+  patterns: string[];
+}
+
+/**
+ * Request body for POST /strategy-generator/create.
+ *
+ * Dynamic signal fields are all optional.
+ * Omitting indicators + patterns → legacy randomised path (backward-compatible).
+ */
+export interface CreateStrategyRequest {
+  // Identity
+  name: string;
+  // Market
+  timeframe: string;
+  exchange: string;
+  symbol: string;
+  // Date range (optional)
+  start_date?: string;
+  end_date?: string;
+  // Backtest params
+  starting_balance?: number;
+  take_profit?: number;
+  stop_loss?: number;
+  fee?: number;
+  leverage?: number;
+  slippage?: number;
+  // Dynamic signal config (NEW) — omit all three for legacy mode
+  indicators?: string[];
+  patterns?: string[];
+  window_config?: WindowConfig;
+}
+
+/**
+ * Response from POST /strategy-generator/create.
+ * Extends the old shape with signal provenance fields.
+ */
+export interface CreateStrategyResponse {
+  // Identity
+  strategy_id: string;
+  display_name: string;
+  timeframe: string;
+  symbol: string;
+  exchange: string;
+  // Backtest
+  summary: BacktestSummary;
+  ledger: LedgerEntry[];
+  win_loss_data: WinLossPoint[];
+  pnl_data: PnLPoint[];
+  // Signal provenance (new — always present, empty list/dict for legacy runs)
+  indicators_used: string[];
+  patterns_used: string[];
+  windows_used: WindowConfig;
+  // Status
+  message: string;
+}
+
+export const strategyGeneratorApi = {
+  /**
+   * List all supported TA-Lib indicators with registry metadata.
+   * Use to populate indicator selection UI and build valid window_config payloads.
+   */
+  getIndicators: () => req<IndicatorListResponse>('/strategy-generator/indicators'),
+
+  /**
+   * List all supported candlestick pattern names.
+   */
+  getPatterns: () => req<PatternListResponse>('/strategy-generator/patterns'),
+
+  /**
+   * List coins available on an exchange (for strategy creation form).
+   */
+  getCoins: (exchange: string) => req<CoinInfo[]>(`/strategy-generator/coins/${exchange}`),
+
+  /**
+   * Create a new trading strategy.
+   * Pass indicators/patterns/window_config for the dynamic path,
+   * or omit them all for legacy randomised mode.
+   */
+  create: (body: CreateStrategyRequest) =>
+    req<CreateStrategyResponse>('/strategy-generator/create', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
+// ─── Shared strategy normalization utilities ──────────────────────────────────
+
+/**
+ * Normalises a WindowConfig from either old flat format or new nested format.
+ *
+ * Old format (flat): { EMA_period: 50, RSI_period: 21 }
+ * New format (nested): { EMA: { period: 50 }, RSI: { period: 21 } }
+ *
+ * Returns a canonical nested WindowConfig.
+ */
+export function normalizeWindowConfig(raw: Record<string, unknown>): WindowConfig {
+  const result: WindowConfig = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      // Already nested: { EMA: { period: 50 } }
+      result[key] = value as Record<string, number>;
+    } else if (key.includes('_') && typeof value === 'number') {
+      // Flat format: EMA_period → { EMA: { period: ... } }
+      const underscoreIdx = key.indexOf('_');
+      const indicator = key.slice(0, underscoreIdx).toUpperCase();
+      const param = key.slice(underscoreIdx + 1);
+      result[indicator] = { ...(result[indicator] ?? {}), [param]: value };
+    }
+  }
+  return result;
+}
+
+/**
+ * Merges user-provided window overrides on top of indicator default params.
+ * Returns a complete WindowConfig with all defaults filled in.
+ */
+export function mergeWithDefaults(
+  indicators: IndicatorDetail[],
+  overrides: WindowConfig,
+): WindowConfig {
+  const result: WindowConfig = {};
+  for (const ind of indicators) {
+    result[ind.name] = {
+      ...ind.default_params,
+      ...(overrides[ind.name] ?? {}),
+    };
+  }
+  return result;
+}
+
 // ─── AI ───────────────────────────────────────────────────────────────────────
 
 export interface ToolExecution {

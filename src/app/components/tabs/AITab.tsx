@@ -3,11 +3,10 @@ import {
   Sparkles, Send, Loader2, Trash2, Bot, User, ChevronDown,
   ChevronRight, CheckCircle2, XCircle, Wrench, RotateCcw,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { ScrollArea } from '../ui/scroll-area';
 import { motion, AnimatePresence } from 'motion/react';
 import { aiApi, AIChatMessage, ToolExecution } from '../../../services/api';
 
@@ -19,10 +18,55 @@ const SUGGESTED_PROMPTS = [
   'Show me the current BTC sentiment',
   'Compare ML models and show the top performer',
   'What is the win rate of my top strategy on Binance?',
-  'Generate a BTC strategy on Binance 1h timeframe and show the win rate',
-  'Create an aggressive ETH scalping strategy with high leverage on Binance',
-  'Generate 3 BTC strategies on 15m timeframe and compare them',
+  // Strategy generation prompts (new dynamic architecture)
+  'Generate a BTC strategy on Binance 1h using EMA, RSI and MACD with custom parameters',
+  'Create an ETH strategy with CDLHAMMER and CDLENGULFING patterns on Binance 15m',
+  'Build a BTC strategy using EMA period=50, RSI period=21 and run a backtest',
 ];
+
+// ── Tool result: strategy creation detail ─────────────────────────────────
+// Renders indicators_used / patterns_used / windows_used from a strategy
+// creation tool call if present in the result data.
+
+interface StrategyCreationDetail {
+  indicators_used?: string[];
+  patterns_used?: string[];
+  windows_used?: Record<string, Record<string, number>>;
+}
+
+function StrategyCreationSummary({ data }: { data: StrategyCreationDetail }) {
+  const hasIndicators = (data.indicators_used?.length ?? 0) > 0;
+  const hasPatterns = (data.patterns_used?.length ?? 0) > 0;
+  if (!hasIndicators && !hasPatterns) return null;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {data.indicators_used?.map(name => {
+        const params = data.windows_used?.[name];
+        const paramsStr = params
+          ? Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ')
+          : null;
+        return (
+          <span
+            key={name}
+            title={paramsStr ?? undefined}
+            className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 border border-blue-500/20 text-blue-300"
+          >
+            {name}{paramsStr ? ` (${paramsStr})` : ''}
+          </span>
+        );
+      })}
+      {data.patterns_used?.map(name => (
+        <span
+          key={name}
+          className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/10 border border-amber-500/20 text-amber-300"
+        >
+          {name}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // ── Tool execution trace card ──────────────────────────────────────────────
 
@@ -66,13 +110,18 @@ function ToolTrace({ tools }: { tools: ToolExecution[] }) {
                   ) : (
                     <XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
                   )}
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span className="font-mono text-blue-400">{t.tool_name}</span>
                     {t.result_summary && (
                       <p className="text-gray-400 mt-0.5 truncate">{t.result_summary}</p>
                     )}
                     {t.error && (
                       <p className="text-red-400 mt-0.5">{t.error}</p>
+                    )}
+                    {/* Render strategy creation signal detail when available */}
+                    {t.tool_name === 'create_strategy' && t.status === 'success' &&
+                      (t.parameters as StrategyCreationDetail).indicators_used && (
+                      <StrategyCreationSummary data={t.parameters as StrategyCreationDetail} />
                     )}
                   </div>
                 </div>
@@ -323,8 +372,8 @@ export function AITab() {
                   Ask me anything about TradeX
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md mb-8">
-                  I can browse strategies, run backtests, analyse sentiment, compare models,
-                  and fetch OHLCV data — all from natural language.
+                  I can browse strategies, create custom signal strategies, run backtests,
+                  analyse sentiment, compare models, and fetch OHLCV data — all from natural language.
                 </p>
 
                 {/* Suggested prompts */}
